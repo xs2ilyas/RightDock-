@@ -1,0 +1,86 @@
+<UserControl x:Class="RightDock.Modules.Dashboard.DashboardCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid Margin="1,0,0,6">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="DAILY OVERVIEW" Margin="0"/>
+            <TextBlock x:Name="UpdatedText" Style="{StaticResource MdCaption}" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <Border Style="{StaticResource MdCard}" Padding="14">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="FOCUS" Margin="0,0,0,2"/>
+                        <TextBlock x:Name="FocusValue" Style="{StaticResource MdValue}" Text="0 min"
+                                   AutomationProperties.AutomationId="DashboardFocusValue"/>
+                        <TextBlock x:Name="FocusMeta" Style="{StaticResource MdCaption}" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="TASKS" Margin="0,0,0,2"/>
+                        <TextBlock x:Name="TaskValue" Style="{StaticResource MdValue}" Text="0 due"
+                                   AutomationProperties.AutomationId="DashboardTaskValue"/>
+                        <TextBlock x:Name="TaskMeta" Style="{StaticResource MdCaption}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Style="{StaticResource MdDivider}" Margin="0,10,0,10"/>
+
+                <Grid>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="HABITS" Margin="0"/>
+                    <TextBlock x:Name="HabitValue" FontSize="12.5" Foreground="#F0F0F0"
+                               HorizontalAlignment="Right" AutomationProperties.AutomationId="DashboardHabitValue"/>
+                </Grid>
+                <ProgressBar x:Name="HabitProgress" Style="{StaticResource MdProgress}" Margin="0,5,0,0"
+                             Minimum="0" Maximum="1" Value="0"/>
+                <TextBlock x:Name="HabitMeta" Style="{StaticResource MdCaption}" Margin="0,4,0,0"/>
+
+                <Border Style="{StaticResource MdDivider}" Margin="0,10,0,10"/>
+
+                <Grid>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="MEDICATION" Margin="0"/>
+                    <TextBlock x:Name="MedValue" FontSize="12.5" Foreground="#F0F0F0"
+                               HorizontalAlignment="Right" AutomationProperties.AutomationId="DashboardMedicationValue"/>
+                </Grid>
+                <TextBlock x:Name="MedMeta" Style="{StaticResource MdCaption}" Margin="0,4,0,0"/>
+
+                <Border Style="{StaticResource MdDivider}" Margin="0,10,0,10"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NEXT UP" Margin="0"/>
+                <TextBlock x:Name="NextText" Style="{StaticResource MdBody}" FontSize="12"
+                           AutomationProperties.AutomationId="DashboardNextText"/>
+                <TextBlock x:Name="NextMeta" Style="{StaticResource MdCaption}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource MdCard}" Margin="0,10,0,0" Padding="14">
+            <StackPanel>
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="HEALTH SNAPSHOT" Margin="0"/>
+                <StackPanel x:Name="HealthPanel" Margin="0,3,0,0"
+                            AutomationProperties.AutomationId="DashboardHealthPanel"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Style="{StaticResource MdPrimaryButton}" Content="Open dashboard"
+                    AutomationProperties.AutomationId="DashboardOpenButton" Click="Open_Click"/>
+            <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Refresh"
+                    Margin="8,0,0,0" Click="Refresh_Click"/>
+        </Grid>
+    </StackPanel>
+</UserControl>

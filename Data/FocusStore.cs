@@ -113,6 +113,34 @@ namespace RightDock.Data
             }
         }
 
+        internal List<FocusSessionItem> Between(DateTime fromUtc, DateTime toUtc)
+        {
+            var items = new List<FocusSessionItem>();
+            if (_database == null || !_database.IsAvailable) return items;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    @"SELECT f.SessionId, f.StartedUtc, f.EndedUtc, f.PlannedSeconds, f.ActualSeconds,
+                             f.SessionType, f.IsCompleted, f.TaskId, t.Title AS TaskTitle
+                      FROM FocusSessions f
+                      LEFT JOIN Tasks t ON t.TaskId = f.TaskId
+                      WHERE f.EndedUtc IS NOT NULL AND f.StartedUtc >= @from AND f.StartedUtc < @to
+                      ORDER BY f.StartedUtc",
+                    Database.Param("@from", ModuleUtil.Iso(fromUtc)),
+                    Database.Param("@to", ModuleUtil.Iso(toUtc))))
+                {
+                    items.Add(Read(row));
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load focus sessions for a date range.", ex);
+            }
+
+            return items;
+        }
+
         internal List<FocusSessionItem> Recent(int limit)
         {
             var items = new List<FocusSessionItem>();

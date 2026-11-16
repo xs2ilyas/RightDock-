@@ -93,6 +93,19 @@ namespace RightDock.Data
         internal string TimeLabel => LocalTime.ToString("HH:mm");
     }
 
+    internal sealed class MedicationOccurrence
+    {
+        internal DateTime LocalTime { get; set; }
+
+        internal string MedicationName { get; set; } = string.Empty;
+
+        internal string Dosage { get; set; }
+
+        internal string Status { get; set; } = "planned";
+
+        internal bool IsDone => Status == "taken" || Status == "skipped";
+    }
+
     internal static class MedicationDays
     {
         internal const string EveryDay = "0,1,2,3,4,5,6";
@@ -378,6 +391,70 @@ JOIN Medications m ON m.MedicationId = l.MedicationId";
             {
                 Services.Log.Error("Could not mark missed medication doses.", ex);
             }
+        }
+
+        internal List<MedicationDose> Between(DateTime fromUtc, DateTime toUtc)
+        {
+            return ReadDoses(fromUtc, toUtc);
+        }
+
+        internal List<MedicationOccurrence> Occurrences(DateTime fromLocalDate, DateTime toLocalDate)
+        {
+            var occurrences = new List<MedicationOccurrence>();
+            if (_database == null || !_database.IsAvailable) return occurrences;
+
+            try
+            {
+                DateTime rangeStart = fromLocalDate.Date.ToUniversalTime();
+                DateTime rangeEnd = toLocalDate.Date.AddDays(1).ToUniversalTime();
+                var statuses = new Dictionary<string, string>(StringComparer.Ordinal);
+
+                foreach (Dictionary<string, object> row in _database.Query(
+                    @"SELECT MedicationId, ScheduleId, ScheduledUtc, Status FROM MedicationLogs
+                      WHERE ScheduledUtc >= @from AND ScheduledUtc < @to",
+                    Database.Param("@from", ModuleUtil.Iso(rangeStart)),
+                    Database.Param("@to", ModuleUtil.Iso(rangeEnd))))
+                {
+                    string key = (row["MedicationId"] as string) + "|" + (row["ScheduleId"] as string)
+                        + "|" + (row["ScheduledUtc"] as string);
+                    statuses[key] = row["Status"] as string ?? "pending";
+                }
+
+                foreach (MedicationItem medication in Load())
+                {
+                    for (DateTime date = fromLocalDate.Date; date <= toLocalDate.Date; date = date.AddDays(1))
+                    {
+                        if (medication.StartDate.HasValue && date < medication.StartDate.Value.Date) continue;
+                        if (medication.EndDate.HasValue && date > medication.EndDate.Value.Date) continue;
+
+                        foreach (MedicationSchedule schedule in medication.Schedules)
+                        {
+                            if (!schedule.AppliesOn(date.DayOfWeek)) continue;
+
+                            TimeSpan? time = schedule.Time();
+                            if (!time.HasValue) continue;
+
+                            DateTime local = date.Add(time.Value);
+                            string key = medication.Id + "|" + schedule.Id + "|"
+                                + ModuleUtil.Iso(local.ToUniversalTime());
+
+                            occurrences.Add(new MedicationOccurrence
+                            {
+                                LocalTime = local,
+                                MedicationName = medication.Name,
+                                Dosage = medication.Dosage,
+                                Status = statuses.TryGetValue(key, out string status) ? status : "planned",
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not build medication occurrences.", ex);
+            }
+
+            return occurrences.OrderBy(occurrence => occurrence.LocalTime).ToList();
         }
 
         internal List<MedicationDose> Today()

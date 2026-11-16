@@ -68,6 +68,17 @@ namespace RightDock.Data
         internal double? Latest { get; set; }
     }
 
+    internal sealed class HealthAverage
+    {
+        internal HealthMetric Metric { get; set; }
+
+        internal double Average { get; set; }
+
+        internal int Days { get; set; }
+
+        internal double? Latest { get; set; }
+    }
+
     internal static class HealthMetrics
     {
         internal static readonly HealthMetric[] All =
@@ -177,6 +188,60 @@ namespace RightDock.Data
             weight.Latest = LatestWeight();
 
             return states;
+        }
+
+        internal List<HealthAverage> Averages(DateTime fromLocalDate, DateTime toLocalDate)
+        {
+            var averages = new List<HealthAverage>();
+            if (_database == null || !_database.IsAvailable) return averages;
+
+            try
+            {
+                var sums = new Dictionary<string, double>(StringComparer.Ordinal);
+                var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+                var latestDates = new Dictionary<string, DateTime>(StringComparer.Ordinal);
+                var latestValues = new Dictionary<string, double>(StringComparer.Ordinal);
+
+                foreach (Dictionary<string, object> row in _database.Query(
+                    @"SELECT LogDate, MetricType, Value FROM HealthLogs
+                      WHERE LogDate >= @start AND LogDate <= @end",
+                    Database.Param("@start", DayKey(fromLocalDate.Date)),
+                    Database.Param("@end", DayKey(toLocalDate.Date))))
+                {
+                    string metricKey = row["MetricType"] as string;
+                    DateTime? date = ParseDayKey(row["LogDate"]);
+                    if (metricKey == null || !date.HasValue) continue;
+
+                    double value = Convert.ToDouble(row["Value"], CultureInfo.InvariantCulture);
+                    sums[metricKey] = (sums.TryGetValue(metricKey, out double sum) ? sum : 0) + value;
+                    counts[metricKey] = (counts.TryGetValue(metricKey, out int count) ? count : 0) + 1;
+
+                    if (!latestDates.TryGetValue(metricKey, out DateTime latestDate) || date.Value > latestDate)
+                    {
+                        latestDates[metricKey] = date.Value;
+                        latestValues[metricKey] = value;
+                    }
+                }
+
+                foreach (HealthMetric metric in HealthMetrics.All)
+                {
+                    if (!counts.TryGetValue(metric.Key, out int count) || count == 0) continue;
+
+                    averages.Add(new HealthAverage
+                    {
+                        Metric = metric,
+                        Average = sums[metric.Key] / count,
+                        Days = count,
+                        Latest = latestValues.TryGetValue(metric.Key, out double latest) ? latest : (double?)null,
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load health averages.", ex);
+            }
+
+            return averages;
         }
 
         internal bool AddDelta(string metricKey, double direction)

@@ -51,6 +51,17 @@ namespace RightDock.Data
         }
     }
 
+    internal sealed class HabitLogEntry
+    {
+        internal string HabitId { get; set; }
+
+        internal DateTime Date { get; set; }
+
+        internal bool IsCompleted { get; set; }
+
+        internal double Value { get; set; }
+    }
+
     internal sealed class HabitStore
     {
         private const string BaseSelect = @"
@@ -105,6 +116,22 @@ FROM Habits";
             catch (Exception ex)
             {
                 Services.Log.Error("Could not seed habits.", ex);
+            }
+        }
+
+        internal int CountActive()
+        {
+            if (_database == null || !_database.IsAvailable) return 0;
+
+            try
+            {
+                object value = _database.Scalar("SELECT COUNT(*) FROM Habits WHERE IsArchived = 0;");
+                return value == null ? 0 : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not count habits.", ex);
+                return 0;
             }
         }
 
@@ -202,6 +229,42 @@ FROM Habits";
             }
 
             return habits;
+        }
+
+        internal List<HabitLogEntry> LogsBetween(DateTime fromLocalDate, DateTime toLocalDate)
+        {
+            var entries = new List<HabitLogEntry>();
+            if (_database == null || !_database.IsAvailable) return entries;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    @"SELECT l.HabitId, l.LogDate, l.Value, l.IsCompleted
+                      FROM HabitLogs l
+                      JOIN Habits h ON h.HabitId = l.HabitId
+                      WHERE h.IsArchived = 0 AND l.LogDate >= @start AND l.LogDate <= @end
+                      ORDER BY l.LogDate, l.HabitId",
+                    Database.Param("@start", DayKey(fromLocalDate.Date)),
+                    Database.Param("@end", DayKey(toLocalDate.Date))))
+                {
+                    DateTime? date = ParseDayKey(row["LogDate"]);
+                    if (!date.HasValue) continue;
+
+                    entries.Add(new HabitLogEntry
+                    {
+                        HabitId = row["HabitId"] as string,
+                        Date = date.Value.Date,
+                        IsCompleted = Convert.ToInt64(row["IsCompleted"], CultureInfo.InvariantCulture) != 0,
+                        Value = Convert.ToDouble(row["Value"], CultureInfo.InvariantCulture),
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load habit logs for a date range.", ex);
+            }
+
+            return entries;
         }
 
         internal HabitItem Get(string habitId)

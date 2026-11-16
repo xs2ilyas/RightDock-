@@ -1,0 +1,50 @@
+<UserControl x:Class="RightDock.Modules.Calendar.CalendarCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid Margin="1,0,0,6">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="PLANNER" Margin="0"/>
+            <TextBlock x:Name="TodayCount" Style="{StaticResource MdCaption}" HorizontalAlignment="Right"
+                       AutomationProperties.AutomationId="CalendarTodayCount"/>
+        </Grid>
+
+        <Border Style="{StaticResource MdCard}" Padding="14">
+            <StackPanel>
+                <Grid>
+                    <TextBlock x:Name="TodayTitle" Style="{StaticResource MdSubtitle}" Text="Today"/>
+                    <TextBlock x:Name="TodayHint" Style="{StaticResource MdCaption}"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <StackPanel x:Name="TodayPanel" Margin="0,5,0,0"
+                            AutomationProperties.AutomationId="CalendarAgendaPanel"/>
+                <TextBlock x:Name="TodayEmpty" Style="{StaticResource MdCaption}" Margin="0,3,0,0"
+                           Text="Nothing scheduled for today."/>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource MdCard}" Margin="0,10,0,0" Padding="14">
+            <StackPanel>
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="COMING UP" Margin="0"/>
+                <StackPanel x:Name="UpcomingPanel" Margin="0,3,0,0"/>
+                <TextBlock x:Name="UpcomingEmpty" Style="{StaticResource MdCaption}" Margin="0,2,0,0"
+                           Text="No entries in the next seven days."/>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Style="{StaticResource MdPrimaryButton}" Content="Open planner"
+                    AutomationProperties.AutomationId="CalendarOpenButton" Click="Open_Click"/>
+            <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Plan today"
+                    Margin="8,0,0,0" Click="Today_Click"/>
+        </Grid>
+    </StackPanel>
+</UserControl>

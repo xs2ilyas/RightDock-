@@ -19,6 +19,7 @@ namespace RightDock.Modules.Notes
 
         private readonly NotesModule _module;
         private string _editingId;
+        private bool _editingArchived;
         private bool _deleteArmed;
         private bool _syncing;
 
@@ -60,9 +61,25 @@ namespace RightDock.Modules.Notes
             _syncing = true;
             try
             {
+                BuildCategoryFilters();
+
+                ArchivedChip.IsChecked = _module.ShowArchived;
+                int archivedCount = _module.ArchivedCount();
+                ArchiveCountText.Text = archivedCount == 0
+                    ? "No archived notes"
+                    : archivedCount + (archivedCount == 1 ? " archived note" : " archived notes");
+
                 List<NoteItem> notes = _module.Query();
-                ListCountText.Text = notes.Count == 0 ? string.Empty : notes.Count + " note" + (notes.Count == 1 ? string.Empty : "s");
+                ListCountText.Text = notes.Count == 0
+                    ? string.Empty
+                    : notes.Count + " note" + (notes.Count == 1 ? string.Empty : "s")
+                        + (_module.ShowArchived ? " in archive" : string.Empty);
                 EmptyText.Visibility = notes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                EmptyText.Text = _module.ShowArchived
+                    ? "No archived notes."
+                    : !string.IsNullOrWhiteSpace(_module.CategoryFilter)
+                        ? "No notes in this category."
+                        : "No notes yet.";
 
                 NotePanel.Children.Clear();
                 foreach (NoteItem note in notes)
@@ -74,11 +91,58 @@ namespace RightDock.Modules.Notes
                 {
                     ClearEditor();
                 }
+                else if (!string.IsNullOrEmpty(_editingId))
+                {
+                    SyncArchiveState();
+                }
+                else
+                {
+                    ArchiveButton.IsEnabled = false;
+                    ArchiveButton.Content = "Archive";
+                }
             }
             finally
             {
                 _syncing = false;
             }
+        }
+
+        private void BuildCategoryFilters()
+        {
+            CategoryPanel.Children.Clear();
+
+            CategoryPanel.Children.Add(BuildCategoryChip(string.Empty, "All categories",
+                string.IsNullOrWhiteSpace(_module.CategoryFilter)));
+
+            foreach (string category in _module.Categories())
+            {
+                CategoryPanel.Children.Add(BuildCategoryChip(category, category,
+                    string.Equals(category, _module.CategoryFilter, StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        private FrameworkElement BuildCategoryChip(string value, string label, bool selected)
+        {
+            string display = label.Length <= 20 ? label : label.Substring(0, 19) + "…";
+
+            var chip = new ToggleButton
+            {
+                Style = (Style)FindResource("MdChip"),
+                Content = display,
+                IsChecked = selected,
+                Tag = value,
+                ToolTip = label,
+            };
+            AutomationProperties.SetName(chip, value.Length == 0
+                ? "All note categories"
+                : "Note category " + value);
+
+            chip.Click += (_, __) =>
+            {
+                if (!_syncing) _module.SetCategory(value);
+            };
+
+            return chip;
         }
 
         private FrameworkElement BuildRow(NoteItem note)
@@ -170,6 +234,7 @@ namespace RightDock.Modules.Notes
             var parts = new List<string> { ModuleUtil.FormatHistoryTime(note.UpdatedUtc) };
             if (!string.IsNullOrWhiteSpace(note.Category)) parts.Add(note.Category);
             if (note.IsPinned) parts.Add("Pinned");
+            if (note.IsArchived) parts.Add("Archived");
 
             string snippet = Snippet(note.Body);
             if (!string.IsNullOrEmpty(snippet)) parts.Add(snippet);
@@ -196,25 +261,29 @@ namespace RightDock.Modules.Notes
             }
 
             _editingId = note.Id;
+            _editingArchived = note.IsArchived;
             EditorTitle.Text = "Edit note";
             TitleInput.Text = note.Title ?? string.Empty;
             CategoryInput.Text = note.Category ?? string.Empty;
             BodyInput.Text = note.Body ?? string.Empty;
             PinChip.IsChecked = note.IsPinned;
+            ArchiveButton.Content = note.IsArchived ? "Restore" : "Archive";
 
             SetExistingState(true);
-            StatusText.Text = string.Empty;
+            StatusText.Text = note.IsArchived ? "Archived note" : string.Empty;
             HideError();
         }
 
         private void ClearEditor()
         {
             _editingId = null;
+            _editingArchived = false;
             EditorTitle.Text = "New note";
             TitleInput.Text = string.Empty;
             CategoryInput.Text = string.Empty;
             BodyInput.Text = string.Empty;
             PinChip.IsChecked = false;
+            ArchiveButton.Content = "Archive";
 
             SetExistingState(false);
             StatusText.Text = string.Empty;
@@ -224,10 +293,32 @@ namespace RightDock.Modules.Notes
         private void SetExistingState(bool existing)
         {
             DeleteButton.IsEnabled = existing;
+            ArchiveButton.IsEnabled = existing;
             ToTaskButton.IsEnabled = existing;
             ToReminderButton.IsEnabled = existing;
             _deleteArmed = false;
             DeleteButton.Content = "Delete";
+        }
+
+        private void SyncArchiveState()
+        {
+            if (string.IsNullOrEmpty(_editingId))
+            {
+                ArchiveButton.IsEnabled = false;
+                ArchiveButton.Content = "Archive";
+                return;
+            }
+
+            NoteItem note = _module.Get(_editingId);
+            if (note == null)
+            {
+                ArchiveButton.IsEnabled = false;
+                return;
+            }
+
+            _editingArchived = note.IsArchived;
+            ArchiveButton.IsEnabled = true;
+            ArchiveButton.Content = note.IsArchived ? "Restore" : "Archive";
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
@@ -261,6 +352,7 @@ namespace RightDock.Modules.Notes
             _editingId = id;
             EditorTitle.Text = "Edit note";
             SetExistingState(true);
+            SyncArchiveState();
             StatusText.Text = "Saved";
         }
 
@@ -273,7 +365,27 @@ namespace RightDock.Modules.Notes
         private void New_Click(object sender, RoutedEventArgs e)
         {
             ClearEditor();
+            if (!string.IsNullOrWhiteSpace(_module.CategoryFilter))
+            {
+                CategoryInput.Text = _module.CategoryFilter;
+            }
             TitleInput.Focus();
+        }
+
+        private void Archive_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_editingId)) return;
+
+            bool archive = !_editingArchived;
+            _module.SetArchived(_editingId, archive);
+            StatusText.Text = archive ? "Note archived" : "Note restored";
+            HideError();
+        }
+
+        private void Archived_Click(object sender, RoutedEventArgs e)
+        {
+            if (_syncing) return;
+            _module.SetShowArchived(ArchivedChip.IsChecked == true);
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)

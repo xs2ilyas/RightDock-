@@ -17,6 +17,8 @@ namespace RightDock.Data
 
         internal bool IsPinned { get; set; }
 
+        internal bool IsArchived { get; set; }
+
         internal DateTime CreatedUtc { get; set; }
 
         internal DateTime UpdatedUtc { get; set; }
@@ -43,13 +45,16 @@ namespace RightDock.Data
             _database = database;
         }
 
-        internal List<NoteItem> Query(string search)
+        internal List<NoteItem> Query(string search, string category = null, bool archived = false)
         {
             var items = new List<NoteItem>();
             if (_database == null || !_database.IsAvailable) return items;
 
-            string filter = " WHERE IsArchived = 0";
-            var parameters = new List<Microsoft.Data.Sqlite.SqliteParameter>();
+            string filter = " WHERE IsArchived = @archived";
+            var parameters = new List<Microsoft.Data.Sqlite.SqliteParameter>
+            {
+                Database.Param("@archived", archived ? 1 : 0),
+            };
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -58,10 +63,16 @@ namespace RightDock.Data
                 parameters.Add(Database.Param("@search", "%" + ModuleUtil.EscapeLike(search.Trim()) + "%"));
             }
 
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                filter += " AND Category = @category COLLATE NOCASE";
+                parameters.Add(Database.Param("@category", category.Trim()));
+            }
+
             try
             {
                 foreach (Dictionary<string, object> row in _database.Query(
-                    @"SELECT NoteId, Title, Body, Category, IsPinned, CreatedUtc, UpdatedUtc
+                    @"SELECT NoteId, Title, Body, Category, IsPinned, IsArchived, CreatedUtc, UpdatedUtc
                       FROM Notes" + filter + " ORDER BY IsPinned DESC, UpdatedUtc DESC LIMIT 300",
                     parameters.ToArray()))
                 {
@@ -76,6 +87,65 @@ namespace RightDock.Data
             return items;
         }
 
+        internal List<string> Categories()
+        {
+            var categories = new List<string>();
+            if (_database == null || !_database.IsAvailable) return categories;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    @"SELECT DISTINCT Category FROM Notes
+                      WHERE Category IS NOT NULL AND TRIM(Category) <> ''
+                      ORDER BY Category COLLATE NOCASE"))
+                {
+                    string category = row["Category"] as string;
+                    if (!string.IsNullOrWhiteSpace(category)) categories.Add(category);
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load note categories.", ex);
+            }
+
+            return categories;
+        }
+
+        internal int CountArchived()
+        {
+            if (_database == null || !_database.IsAvailable) return 0;
+
+            try
+            {
+                object value = _database.Scalar("SELECT COUNT(*) FROM Notes WHERE IsArchived = 1;");
+                return value == null ? 0 : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not count archived notes.", ex);
+                return 0;
+            }
+        }
+
+        internal bool SetArchived(string noteId, bool archived)
+        {
+            if (string.IsNullOrWhiteSpace(noteId) || _database == null || !_database.IsAvailable) return false;
+
+            try
+            {
+                return _database.Execute(
+                    "UPDATE Notes SET IsArchived = @archived, UpdatedUtc = @now WHERE NoteId = @id;",
+                    Database.Param("@archived", archived ? 1 : 0),
+                    Database.Param("@now", ModuleUtil.Iso(DateTime.UtcNow)),
+                    Database.Param("@id", noteId)) > 0;
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not archive a note.", ex);
+                return false;
+            }
+        }
+
         internal NoteItem Get(string noteId)
         {
             if (string.IsNullOrWhiteSpace(noteId) || _database == null || !_database.IsAvailable) return null;
@@ -83,7 +153,7 @@ namespace RightDock.Data
             try
             {
                 List<Dictionary<string, object>> rows = _database.Query(
-                    @"SELECT NoteId, Title, Body, Category, IsPinned, CreatedUtc, UpdatedUtc
+                    @"SELECT NoteId, Title, Body, Category, IsPinned, IsArchived, CreatedUtc, UpdatedUtc
                       FROM Notes WHERE NoteId = @id",
                     Database.Param("@id", noteId));
                 return rows.Count == 0 ? null : Read(rows[0]);
@@ -196,6 +266,7 @@ namespace RightDock.Data
                 Body = row["Body"] as string ?? string.Empty,
                 Category = row["Category"] as string,
                 IsPinned = Convert.ToInt64(row["IsPinned"], CultureInfo.InvariantCulture) != 0,
+                IsArchived = Convert.ToInt64(row["IsArchived"], CultureInfo.InvariantCulture) != 0,
                 CreatedUtc = ModuleUtil.FromIso(row["CreatedUtc"]) ?? DateTime.UtcNow,
                 UpdatedUtc = ModuleUtil.FromIso(row["UpdatedUtc"]) ?? DateTime.UtcNow,
             };

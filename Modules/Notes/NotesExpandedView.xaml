@@ -22,7 +22,17 @@
             <TextBox x:Name="SearchBox" Style="{StaticResource MdInput}" TextChanged="Search_TextChanged"
                      AutomationProperties.AutomationId="NoteSearch"/>
 
-            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,6,0,4"/>
+            <WrapPanel x:Name="CategoryPanel" Margin="0,8,0,0"/>
+
+            <Grid Margin="0,2,0,2">
+                <ToggleButton x:Name="ArchivedChip" Style="{StaticResource MdChip}" Content="Archived"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.AutomationId="NoteArchivedChip" Click="Archived_Click"/>
+                <TextBlock x:Name="ArchiveCountText" Style="{StaticResource MdCaption}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,5"/>
+            </Grid>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,4,0,4"/>
 
             <ScrollViewer MaxHeight="500" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
@@ -77,13 +87,16 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <Button Style="{StaticResource MdPrimaryButton}" Content="Save note"
                             Click="Save_Click"/>
                     <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Clear"
                             Margin="8,0,0,0" HorizontalAlignment="Left" Click="Clear_Click"/>
-                    <Button x:Name="DeleteButton" Grid.Column="2" Style="{StaticResource MdDangerButton}"
+                    <Button x:Name="ArchiveButton" Grid.Column="2" Style="{StaticResource MdSecondaryButton}"
+                            Content="Archive" IsEnabled="False" Margin="0,0,8,0" Click="Archive_Click"/>
+                    <Button x:Name="DeleteButton" Grid.Column="3" Style="{StaticResource MdDangerButton}"
                             Content="Delete" IsEnabled="False" Click="Delete_Click"/>
                 </Grid>
 

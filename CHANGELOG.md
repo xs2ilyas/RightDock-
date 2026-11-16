@@ -8,11 +8,97 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Phase 4 expanded workspace: dashboard, daily overview, notes manager, calendar/planner,
-  statistics.
+- Phase 5 quick tools and learning: breathing, screen-break reminder, learning tracker
+  (Quick Tools remains exactly three tools).
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.6.0] — 2026-11-16 — Phase 4 planning and insight
+
+### Added
+- **Dashboard module** (`Modules/Dashboard/`) — registered first so it heads the dock.
+  `DashboardModule` builds a `DashboardSnapshot` from all existing stores (focus today
+  plus 7-day totals, task due/overdue/completed counts, habit done/total and best streak,
+  medication taken/planned and next actionable dose, active/overdue reminders, note
+  counts, health today values and latest weight). The compact "Daily Overview" shows
+  focus, tasks, habits, medication, next up and a health snapshot; the expanded view adds
+  "Today at a glance", four quick actions and a 2×3 widget grid (Focus bars, Tasks,
+  Habits, Medication, Health, Reminders & Notes), each navigating to its owning module.
+  Refresh timers run only while a view is loaded (60 s compact, 30 s expanded).
+- **Calendar planner module** (`Modules/Calendar/`) — a Monday-start 6-week month grid
+  aggregating tasks by due date, reminders by effective due, planned medication
+  occurrences from schedules and ended focus sessions. Day cells show entry counts, two
+  titles and "+N more"; the selected-day agenda shows times, colored kind stripes,
+  done/overdue styling and a legend. Quick add accepts a title and `h:mm` time (default
+  09:00) and creates a task or reminder through the owning store, then refreshes it.
+  Compact view lists today's agenda and the next seven days.
+- **Statistics module** (`Modules/Statistics/`) — daily (7 days), weekly (8 Monday weeks)
+  and monthly (6 months) buckets of focus minutes, completed tasks, habit check-in rate
+  and medication adherence, with range labels and health averages. Shared `StatsChart`
+  renders uniform bars with value labels and tooltips (rate metrics on a fixed 0–100 %
+  scale); the expanded view adds summary cards, metric chips, a caption and a scrollable
+  breakdown table. Compact view shows four totals and a mini chart.
+- **Notes manager** — category filter chips built from stored categories (new notes
+  prefill the active category), an Archived toggle with counts and empty state, and
+  soft-hide archive/restore from the editor (`Notes.IsArchived`, no schema change).
+- Shared reporting queries: `TaskStore.Counts/DueBetween/CompletedBetween`,
+  `FocusStore.Between`, `ReminderStore.Between`, `MedicationStore.Between/Occurrences`,
+  `HabitStore.LogsBetween/CountActive`, `HealthStore.Averages`, and
+  `NoteStore.Categories/CountArchived/SetArchived`.
+- Automation ids for the new surfaces (`DashboardOpenButton`, `CalendarOpenButton`,
+  `CalendarAddButton`, `CalendarQuickTitle`, `CalendarDayYYYYMMDD`, `StatsOpenButton`,
+  `StatsRefreshButton`, `StatsChartPanel`, `StatsTablePanel`, `NoteArchivedChip`, …).
+
+### Changed
+- Three new modules registered in `App.OnStartup` (Dashboard first, Calendar and
+  Statistics after Health); the dock, Settings → Modules and module state store now cover
+  ten modules. Existing saved states keep their order.
+- Statistics expanded layout was tightened (150 px chart, 132 px breakdown viewport) so
+  the 980×680 window fits without a page scrollbar; the breakdown header aligns with the
+  scrolling rows.
+- Notes list count and dashboard note values singularise ("1 note") and health values
+  read naturally ("2 glasses of 8 glasses").
+- Version 1.6.0.
+
+### Verified
+- All ten dock buttons appear in order after restart; Dashboard, Calendar and Statistics
+  open compact and expanded; existing modules and pins unchanged.
+- Dashboard showed "15 min / 2 sessions", "0 due", "2 of 10", "1 of 2", next reminder
+  "Drink water · Tomorrow 11:44", health 2/8 glasses, 5/30 min, 0.5/8 h and 72.5 kg, plus
+  a 7-day focus chart with today's bar; after quick adds from the planner it updated to
+  "1 due", "3 active" and "1 note".
+- Calendar rendered 70 entries for November 2026 with per-day counts; today's agenda
+  listed 8 items with done/overdue styling; quick add created a task at 09:00 (visible in
+  Tasks) and a reminder at 15:30 (visible in the agenda and counted by the dashboard).
+- Statistics: Daily 15 min / 1 task / 6 % habits / 50 % medication; Weekly "Last 8 weeks"
+  with 1 % habit rate; Monthly "Last 6 months" (Jun–Nov); metric chips re-rendered chart
+  and caption; breakdown rows matched the summary.
+- Notes: category filter, archive ("1 archived note", "1 note in archive", Restore),
+  restore ("Note restored") and pin/unpin all worked; the archived chip renders as a
+  compact chip.
+- Regression: Tasks, Health and all Phase 2/3 popups still open with data; single
+  process; no errors logged.
+- Idle baseline after opening every Phase 4 view once: 145.7 MB working set, 94.3 MB
+  private, 0.078 CPU seconds over 30 s.
+
+### Files
+- Added: `Modules/Dashboard/DashboardModule.cs`,
+  `Modules/Dashboard/DashboardCompactView.xaml(.cs)`,
+  `Modules/Dashboard/DashboardExpandedView.xaml(.cs)`,
+  `Modules/Calendar/CalendarModule.cs`,
+  `Modules/Calendar/CalendarCompactView.xaml(.cs)`,
+  `Modules/Calendar/CalendarExpandedView.xaml(.cs)`,
+  `Modules/Statistics/StatisticsModule.cs`, `Modules/Statistics/StatsChart.cs`,
+  `Modules/Statistics/StatisticsCompactView.xaml(.cs)`,
+  `Modules/Statistics/StatisticsExpandedView.xaml(.cs)`.
+- Updated: `App.xaml.cs`, `RightDock.csproj`, `Data/TaskStore.cs`,
+  `Data/FocusStore.cs`, `Data/ReminderStore.cs`, `Data/MedicationStore.cs`,
+  `Data/HabitStore.cs`, `Data/HealthStore.cs`, `Data/NoteStore.cs`,
+  `Modules/Notes/NotesModule.cs`, `Modules/Notes/NotesExpandedView.xaml(.cs)`,
+  `PROJECT_ARCHITECTURE.md`, `IMPLEMENTATION_PROGRESS.md`, `CHANGELOG.md`.
 
 ---
 

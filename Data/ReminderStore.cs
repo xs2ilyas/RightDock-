@@ -56,6 +56,31 @@ FROM Reminders";
                 BaseSelect + " WHERE IsCompleted = 1 ORDER BY CompletedUtc DESC LIMIT 100");
         }
 
+        internal List<ReminderItem> Between(DateTime fromUtc, DateTime toUtc)
+        {
+            var items = new List<ReminderItem>();
+            if (_database == null || !_database.IsAvailable) return items;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    BaseSelect + @" WHERE COALESCE(SnoozeUntilUtc, DueUtc) >= @from
+                        AND COALESCE(SnoozeUntilUtc, DueUtc) < @to
+                      ORDER BY COALESCE(SnoozeUntilUtc, DueUtc)",
+                    Database.Param("@from", ModuleUtil.Iso(fromUtc)),
+                    Database.Param("@to", ModuleUtil.Iso(toUtc))))
+                {
+                    items.Add(Read(row));
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load reminders for a date range.", ex);
+            }
+
+            return items;
+        }
+
         internal ReminderItem Get(string reminderId)
         {
             if (string.IsNullOrWhiteSpace(reminderId) || _database == null || !_database.IsAvailable) return null;

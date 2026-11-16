@@ -1,10 +1,10 @@
 # RightDock — Implementation Progress
 
-> Release **1.5.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.6.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
-> Health & Lifestyle) complete.
-> Next up: **Phase 4** (dashboard, daily overview, notes manager, calendar/planner,
-> statistics).
+> Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
+> Statistics) complete.
+> Next up: **Phase 5** (breathing, screen-break reminder, learning tracker).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -22,8 +22,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.3.0 | Phase 1: Module manager, popup host, SQLite, scheduler, notifications, settings integration | ✔ Done ✔ Tested |
 | v1.4.0 | Phase 2: Focus, Tasks, Reminders, Quick Ideas / Notes | ✔ Done ✔ Tested |
 | v1.5.0 | Phase 3: Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested |
+| v1.6.0 | Phase 4: Dashboard, Daily Overview, Notes manager, Calendar planner, Statistics | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
-| Phase 4 | Dashboard, Daily Overview, Notes, Calendar, Statistics | ◻ Pending |
 | Phase 5 | Breathing, Screen-break, Learning tracker | ◻ Pending |
 | Phase 6 | Profiling, leak/migration/backup/multi-monitor testing | ◻ Pending |
 
@@ -345,7 +345,97 @@ store with a `Changed` event.
 
 ---
 
-## 8. Documentation and repository (completed)
+## 8. v1.6.0 — Phase 4 planning and insight (completed, tested)
+
+Phase 4 adds three new modules plus a Notes manager upgrade. No schema migration was
+needed: Dashboard, Calendar and Statistics aggregate the existing tables read-only, and
+the Notes manager uses the existing `Notes.IsArchived` column.
+
+### Dashboard (`Modules/Dashboard`)
+- `DashboardModule` (dock icon `lucide:layout-dashboard`, registered first so it heads the
+  dock) builds a `DashboardSnapshot` from the Focus, Task, Habit, Medication, Reminder,
+  Note and Health stores: focus today plus seven daily totals, task due/overdue/completed
+  today, habit done/total and best streak, medication taken/planned and next actionable
+  dose, active/overdue reminders and next reminder, note/pin/archive counts, health
+  today values and latest weight.
+- Compact "DAILY OVERVIEW" shows focus, tasks, habits, medication, next up and a health
+  snapshot, with **Open dashboard** and **Refresh**.
+- Expanded view: "Today at a glance" summary, four quick actions (Focus timer, Tasks,
+  Plan day → Calendar, Statistics) and a 2×3 widget grid (Focus 7-day bars, Tasks,
+  Habits, Medication, Health, Reminders & Notes). Every widget navigates to its owning
+  module through `ModuleContext.OpenExpanded`; no editing is duplicated.
+- A refresh timer exists only while a view is loaded: 60 s compact, 30 s expanded.
+
+### Daily Overview
+- Included in the Dashboard compact (values and next-up) and expanded summary. Note counts
+  are singularised ("1 note") and health values read "2 glasses of 8 glasses".
+
+### Notes manager (`Modules/Notes`)
+- Category filter chips are built from distinct stored categories; **All categories**
+  clears the filter. New notes prefill the active category.
+- Archive/restore is a soft hide: `SetArchived` updates `IsArchived` + `UpdatedUtc`, the
+  Archived chip switches the list, and the editor button toggles Archive/Restore with
+  status feedback. The list count and empty state reflect the archive view.
+- Pinning remains available per row and in the editor; row meta shows archived/pinned
+  state and the active category.
+
+### Calendar planner (`Modules/Calendar`)
+- `CalendarModule` (dock icon `lucide:calendar-days`, `PLANNER` compact) aggregates tasks
+  by due date, reminders by effective due (`COALESCE(SnoozeUntilUtc, DueUtc)`), planned
+  medication occurrences from schedules (with existing log status) and ended focus
+  sessions, sorted by local time.
+- Expanded view: Monday-start 6-week month grid with weekday header, prev/Today/next
+  navigation, per-day counts, two titles and "+N more"; selected day highlighted, today
+  outlined, adjacent-month days dimmed; colored legend for Task/Reminder/Medication/Focus.
+- Selected-day agenda shows time, colored stripe, title, type/status detail; done items
+  are struck through, overdue items red. Quick add validates a title and `h:mm` time
+  (default 09:00), inserts a task or reminder through the owning store, refreshes that
+  module and selects the day.
+
+### Statistics (`Modules/Statistics`)
+- `StatisticsModule` (dock icon `lucide:chart-column`) buckets the last 7 days, 8 Monday
+  weeks or 6 calendar months. Focus sums ended-session minutes; tasks count `CompletedUtc`;
+  habit rate is completed check-ins ÷ (active habits × days); medication adherence is
+  taken ÷ (taken + missed + skipped); health averages come from `HealthStore.Averages`.
+- Shared `StatsChart` builds uniform bar charts for four metrics (focus minutes, tasks,
+  habit %, medication %) with metric colors, value labels and tooltips; rate metrics use
+  a fixed 0–100 % scale.
+- Expanded view: Daily/Weekly/Monthly chips, four summary cards, metric chips, chart with
+  explanatory caption, and a scrollable breakdown table (period, focus, tasks, habits,
+  medication). Compact view mirrors the four totals and a mini chart.
+- Both views refresh on a 60 s timer while loaded; granularity and metric are retained by
+  the module for the session.
+
+### Verified on a live Windows 11 session
+- **Dock/registration:** all ten modules appear in order Dashboard, Focus, Tasks,
+  Reminders, Notes, Habits, Medication, Health & Lifestyle, Calendar, Statistics after a
+  restart; existing pins and Add/Settings/Close controls unchanged.
+- **Dashboard:** compact showed "15 min / 2 sessions", "0 due", "2 of 10", "1 of 2",
+  "Drink water · Tomorrow 11:44" and the health snapshot (2/8 glasses, 5/30 min, 0.5/8 h,
+  72.5 kg); expanded showed the 7-day focus chart with today's 15 min bar and all six
+  widgets populated from the same data. After quick-adding entries from the planner, the
+  dashboard update showed "1 due", "3 active" and "1 note".
+- **Calendar:** November 2026 grid showed 70 aggregated entries and per-day counts; today
+  listed 8 agenda items (reminders, medication, focus, tasks) with done items struck
+  through; quick add "Phase 4 quick add" at 09:00 created a task visible in Tasks, and
+  "Phase 4 reminder" at 15:30 created a reminder shown in the agenda and counted by the
+  dashboard.
+- **Statistics:** Daily showed 15 min/2 sessions, 1 task, 6 % habit rate (4 check-ins),
+  50 % medication adherence (1 of 2), chart title/caption per metric and matching table
+  rows; Weekly switched to "Last 8 weeks" with week labels and 1 % habit rate; Monthly
+  switched to "Last 6 months" (Jun–Nov) and the habit chart/table; metric chips re-rendered
+  the chart and caption for Focus/Tasks/Habits/Medication.
+- **Notes:** category chip "Planning" filtered to the single note; editing and clicking
+  Archive hid the note from the active list, showed "1 archived note"/"1 note in
+  archive", switched the editor to Restore and reported "Note archived"; Restore returned
+  it with "Note restored"; the row pin toggle removed and restored "Pinned" meta.
+- **Residual checks:** all Phase 2/3 compact views still open with their data; single
+  process; after opening every Phase 4 view once the process idled at 145.7 MB working
+  set, 94.3 MB private and 0.078 CPU seconds over 30 s.
+
+---
+
+## 9. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -355,31 +445,32 @@ store with a `Changed` event.
 
 ---
 
-## 9. Measured resource baseline
+## 10. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
-visible, all seven modules registered, no popups open, 30 s idle sample):
+visible, all ten modules registered and every Phase 4 view opened once, no popups open,
+30 s idle sample):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | ≈124 MB |
-| Private bytes | ≈72 MB |
-| Idle CPU | 0.02 CPU seconds over 30 s → ≈0.07 % of one core |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; animation timer only during slides |
+| Working set | ≈146 MB |
+| Private bytes | ≈94 MB |
+| Idle CPU | 0.078 CPU seconds over 30 s → ≈0.26 % of one core |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
 
 Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
 ≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
-≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %. The Phase 3 step is
-small because the new stores only query short date windows and the three WPF views load
-on first open. Phase 6 will repeat this with profiling tools, memory-leak checks, and
-idle-vs-active comparisons per module.
+≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %; 1.6.0 Phase 4 after
+opening all views ≈146 MB / ≈94 MB / ≈0.26 %. The increase comes from WPF caching the
+Dashboard, Calendar and Statistics visual trees after first open; Phase 6 will repeat
+this with profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
 
 ---
 
-## 10. Known limitations (current release)
+## 11. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -399,7 +490,14 @@ idle-vs-active comparisons per module.
   support one-time/daily/weekly/custom-N-days; there is no full RRULE engine (no "every
   weekday", "last Friday", or end-date rules yet).
 - **Due dates are parsed from text** — accepted formats include `today`, `tomorrow`,
-  `yyyy-MM-dd`, `HH:mm`, and combinations; there is no calendar-picker control yet.
+  `yyyy-MM-dd`, `HH:mm`, and combinations; there is no calendar-picker control yet. The
+  Calendar planner shows due items on a month grid but only supports quick-adding new
+  tasks/reminders, not moving or editing existing entries inline.
+- **Calendar is Monday-start and single timezone** — weeks always start Monday and all
+  aggregation uses the current local timezone; there is no configurable week start.
+- **Dashboard and Statistics are read-only** — widgets navigate to the owning module for
+  edits; lifetime/all-time statistics, custom date ranges and CSV export are not
+  implemented yet.
 - **Focus timing is wall-clock** — sessions keep running through sleep/idle; there is no
   idle detection or auto-pause, and pausing records segments that are finalised on
   resume/stop.
@@ -415,11 +513,13 @@ idle-vs-active comparisons per module.
   a scrollable layout.
 - **Habit streaks use a 400-day window** — current/best streaks are computed from logs in
   the last 400 days (enough for daily habits); longer history is not considered.
-- **Habit week view covers 7 days** — the dashboard matrix shows the current week; longer
-  trends arrive with Statistics in Phase 4.
+- **Habit week view covers 7 days** — the habit dashboard matrix shows the current week;
+  longer habit trends live in Statistics (up to 6 months).
 - **Medication doses are materialized on refresh** — the last six days (bounded by the
   medication's creation time) plus today; doses older than two hours without action are
-  marked missed. There is no adherence percentage, refill tracking, or inventory count.
+  marked missed. Statistics computes adherence from logged statuses, but there is no
+  refill tracking or inventory count. Future planner days show planned occurrences
+  computed from schedules rather than persisted rows.
 - **Health metrics are fixed** — the eight metrics have preset targets, units and steps;
   user-defined metrics require the per-module settings page planned for a later phase.
 - **No backup/restore/export/import** — the SQLite file can be copied manually while the
@@ -427,7 +527,7 @@ idle-vs-active comparisons per module.
 
 ---
 
-## 11. Pending roadmap
+## 12. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -456,12 +556,12 @@ idle-vs-active comparisons per module.
 - [x] Health & Lifestyle: water, meals, sleep, relaxation, vegetables, fruits, activity,
       weight; rings, averages, history.
 
-### Phase 4 — Expanded workspace
-- [ ] Dashboard window with focus/task/habit overview and widget grid.
-- [ ] Daily Overview compact + detailed summary.
-- [ ] Notes manager (categories, archive, pinning).
-- [ ] Calendar / daily planner (internal calendar; tasks, reminders, medication, focus).
-- [ ] Statistics (daily/weekly/monthly, native simple charts, tables).
+### Phase 4 — Expanded workspace (completed in 1.6.0)
+- [x] Dashboard window with focus/task/habit overview and widget grid.
+- [x] Daily Overview compact + detailed summary.
+- [x] Notes manager (categories, archive, pinning).
+- [x] Calendar / daily planner (internal calendar; tasks, reminders, medication, focus).
+- [x] Statistics (daily/weekly/monthly, native simple charts, tables).
 
 ### Phase 5 — Quick Tools and learning
 - [ ] Quick Ideas/Notes tool, Breathing tool, Screen-break reminder — exactly three.
@@ -477,17 +577,17 @@ idle-vs-active comparisons per module.
 
 ---
 
-## 12. Acceptance criteria tracking
+## 13. Acceptance criteria tracking
 
-From the master specification §11:
+From the master specification §11 (items 23–25 track the Phase 4 scope):
 
 | # | Criterion | Status |
 | --- | --- | --- |
 | 1 | Existing application launching unchanged | ✔ Tested |
 | 2 | Existing custom icons still work | ✔ Tested |
 | 3 | Dock approximately 50 px wide | ✔ Tested |
-| 4 | Productivity modules open as compact popups | ✔ Tested (all seven at 320 DIP) |
-| 5 | Expanded workspace works | ✔ Tested (980×680 dashboard per module) |
+| 4 | Productivity modules open as compact popups | ✔ Tested (all ten at 320 DIP) |
+| 5 | Expanded workspace works | ✔ Tested (980×680 expanded views, widget grid, month planner, statistics) |
 | 6 | Compact and expanded views share data | ✔ Tested (both views over one store, rebuilt on change) |
 | 7 | Tasks persist after restart | ✔ Tested |
 | 8 | Reminders work correctly | ✔ Tested (fire, toast, snooze, complete, overdue on startup) |
@@ -495,7 +595,7 @@ From the master specification §11:
 | 10 | Focus sessions record accurate durations | ✔ Tested (planned vs actual seconds, pause segments) |
 | 11 | Habits retain daily/weekly history | ✔ Tested (10 seeded + custom habits, 7-day matrix, 3-day streak across restart) |
 | 12 | Medication schedules and intake logs separate | ✔ Tested (`Medications`/`MedicationSchedules`/`MedicationLogs`, pending→taken/skipped/snoozed/missed) |
-| 13 | Quick Ideas / Notes saves information | ✔ Tested (capture, pin, search, convert) |
+| 13 | Quick Ideas / Notes saves information | ✔ Tested (capture, pin, search, categories, archive/restore, convert) |
 | 14 | Breathing sessions function | ◻ Pending (Phase 5) |
 | 15 | Screen-break reminders function | ◻ Pending (Phase 5) |
 | 16 | Module settings persist | ✔ Tested |
@@ -503,12 +603,15 @@ From the master specification §11:
 | 18 | Backup and restore work | ◻ Pending (Phase 6) |
 | 19 | No mandatory internet access | ✔ Tested (no network code) |
 | 20 | No unnecessary background processes | ✔ Tested (single process) |
-| 21 | CPU and memory measured | ✔ Baseline recorded (§9); full profiling Phase 6 |
+| 21 | CPU and memory measured | ✔ Baseline recorded (§10); full profiling Phase 6 |
 | 22 | Launcher functionality not broken | ✔ Tested |
+| 23 | Dashboard aggregates daily focus, tasks, habits, medication, health | ✔ Tested (snapshot + six widgets after restart) |
+| 24 | Calendar aggregates tasks, reminders, medication and focus | ✔ Tested (month grid, agenda, quick add) |
+| 25 | Statistics show daily/weekly/monthly charts and tables | ✔ Tested (three granularities, four metrics) |
 
 ---
 
-## 13. Test method notes
+## 14. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in

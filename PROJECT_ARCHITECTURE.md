@@ -1,7 +1,7 @@
 # RightDock — Project Architecture
 
-> Current release: **1.5.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
-> modules + Phase 3 personal tracking modules)
+> Current release: **1.6.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
+> modules + Phase 3 personal tracking + Phase 4 planning and insight)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
@@ -9,8 +9,8 @@ the right edge of the primary monitor. It reserves desktop work area through the
 AppBar protocol, launches pinned applications, and supports a 181-glyph outlined icon
 system, auto-hide with edge reveal, a five-tab settings popup, and a productivity layer:
 SQLite persistence, a module manager with compact/expanded popups, a centralized
-scheduler, in-app notification cards, and the Focus, Tasks, Reminders, Notes, Habits,
-Medication, and Health & Lifestyle modules.
+scheduler, in-app notification cards, and the Dashboard, Focus, Tasks, Reminders, Notes,
+Habits, Medication, Health & Lifestyle, Calendar and Statistics modules.
 
 All functionality is implemented in one WPF process. No WebViews, Electron, separate
 module executables, background services, or third-party UI frameworks are used.
@@ -58,10 +58,13 @@ RightDock/
 ├─ Data/
 │  ├─ Database.cs            SQLite connection, pragmas, versioned migrations, query helpers
 │  ├─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config)
-│  ├─ FocusStore.cs          FocusSessions rows, recent activity, daily totals
-│  ├─ TaskStore.cs           Tasks CRUD, views, search, recurrence-insert on completion
-│  ├─ ReminderStore.cs       Reminders CRUD, snooze, completion, recurrence
-│  └─ NoteStore.cs           Notes CRUD, search, pin, timestamps
+│  ├─ FocusStore.cs          FocusSessions rows, recent activity, daily totals, ranges
+│  ├─ TaskStore.cs           Tasks CRUD, views, search, counts, ranges, recurrence-insert
+│  ├─ ReminderStore.cs       Reminders CRUD, snooze, completion, recurrence, date ranges
+│  ├─ NoteStore.cs           Notes CRUD, search, pin, categories, archive, timestamps
+│  ├─ HabitStore.cs          Habits + log window, batches, day-range queries
+│  ├─ MedicationStore.cs     Medications, schedules, intake logs, occurrences by day
+│  └─ HealthStore.cs         HealthLogs, metric definitions, day-range averages
 ├─ Modules/
 │  ├─ IProductivityModule.cs Module contract + ProductivityModule base class
 │  ├─ ModuleContext.cs       Services handed to modules + OpenExpanded/RefreshModule callbacks
@@ -70,10 +73,16 @@ RightDock/
 │  ├─ ModuleUtil.cs          Shared formatting, parsing and recurrence helpers
 │  ├─ PopupHost.cs           One compact + one expanded popup per module
 │  ├─ ModulePopupWindow.xaml/.cs  Shared popup shell (title, icon, close, placement)
+│  ├─ Dashboard/             DashboardModule + daily overview widgets
 │  ├─ Focus/                 FocusModule + compact/expanded timer views
 │  ├─ Tasks/                 TasksModule + compact/expanded list/editor views
 │  ├─ Reminders/             RemindersModule (scheduler integration) + views
-│  └─ Notes/                 NotesModule (capture + conversion) + views
+│  ├─ Notes/                 NotesModule (capture, conversion, archive) + views
+│  ├─ Habits/                HabitsModule + compact/expanded tracking views
+│  ├─ Medication/            MedicationModule + dose views and schedule editor
+│  ├─ Health/                HealthModule + rings, quick log, 7-day views
+│  ├─ Calendar/              CalendarModule + month grid planner and agenda
+│  └─ Statistics/            StatisticsModule + StatsChart + daily/weekly/monthly views
 ├─ Services/
 │  ├─ Log.cs                 Append-only log under %APPDATA%\RightDock\logs
 │  ├─ Scheduler.cs           Central timestamp-based scheduler (one DispatcherTimer)
@@ -300,7 +309,9 @@ productivity tables (`Tasks`, `TaskCategories`, `Projects`, `Reminders`,
 and updated timestamps. Version 2 (1.5.0) adds `MedicationLogs.SnoozeUntilUtc` and
 `IX_MedicationLogs_Status`, so snoozed doses and the missed-cutoff scan stay indexed.
 Habit logs are upserted on `(HabitId, LogDate)` and health logs on
-`(LogDate, MetricType)`.
+`(LogDate, MetricType)`. 1.6.0 adds no schema changes: the Notes manager reuses the
+existing `Notes.IsArchived` column for soft-hide/restore, and Dashboard, Calendar and
+Statistics read-only aggregate the existing tables.
 
 `ModuleSettings` stores `IsEnabled`, `IsVisible`, `SortOrder`, and `ConfigJson` per
 module id; `ModuleManager` loads it at startup and saves on every change. Disabling a
@@ -329,8 +340,9 @@ settings changes; startup registration is the only registry state the app owns.
 - UI thread only; no worker threads or background services yet.
 - `DispatcherTimer`s: the 110 ms hover poll while running, a 16 ms animation timer that
   exists only during a 170 ms slide, the scheduler's single timer armed to the earliest
-  due timestamp (re-armed at most once per hour so sleep/resume is handled), and Focus's
-  1 s tick that runs only while a session is active.
+  due timestamp (re-armed at most once per hour so sleep/resume is handled), Focus's 1 s
+  tick only while a session is active, and a refresh timer that exists only while a
+  Dashboard (60 s compact / 30 s expanded), Calendar or Statistics view is loaded.
 - SQLite access is synchronous and serialized behind one connection lock; operations are
   short and scoped to the UI thread. Callbacks from the scheduler run on the UI thread.
 - Notifications are owned by `NotificationService`: at most four `ToastWindow` cards are
@@ -343,7 +355,9 @@ settings changes; startup registration is the only registry state the app owns.
   ~59 MB private, ≈0.05 % of one core**; 1.4.0 with all four Phase 2 modules initialized
   idled at **~123 MB working set, ~71 MB private, 0 % CPU over 30 s**; 1.5.0 with all
   seven modules registered idles at **~124 MB working set, ~72 MB private, 0.02 CPU
-  seconds over 30 s** (Windows 11, 2560×1600 @125 %).
+  seconds over 30 s**; 1.6.0 with all ten modules registered and every Phase 4 view
+  opened once idles at **~146 MB working set, ~94 MB private, 0.08 CPU seconds over
+  30 s** (Windows 11, 2560×1600 @125 %).
 
 These constraints are the benchmark for every new module: reuse the process, avoid
 polling, prefer timestamp math over per-item timers, load UI on demand.
@@ -372,8 +386,9 @@ dotnet build RightDock.csproj
 
 The master specification evolves RightDock into a productivity and life-management
 system while preserving everything above. **Phase 1 (core infrastructure) is implemented
-in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, and Phase 3 (Habits,
-Medication, Health & Lifestyle) in 1.5.0**; the launcher, AppBar, auto-hide, icons and
+in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
+Medication, Health & Lifestyle) in 1.5.0, and Phase 4 (Dashboard, Notes manager,
+Calendar/planner, Statistics) in 1.6.0**; the launcher, AppBar, auto-hide, icons and
 settings keep their contracts.
 
 ### 11.1 Layering
@@ -465,7 +480,7 @@ programmatic updates with a `_syncing` flag, and rebuild lists only when a view 
 | Focus | `lucide:timer` | Daily totals/session count, 15/25/45/60 presets, start/pause/resume/reset, recent sessions | 7-day chart, session history, task linking | `FocusSessions` |
 | Tasks | `lucide:clipboard-list` | Quick add (Enter), today's tasks, complete toggle | Views Today/Upcoming/Completed/All, search, full editor (due, category, project, priority, monthly/daily/weekly recurrence, notes) | `Tasks` |
 | Reminders | `lucide:bell` | Quick add (+1 h), complete, snooze menu | Active/History, one-time/daily/weekly/custom-N-days recurrence, snooze, notes | `Reminders` |
-| Notes | `lucide:notebook-pen` | Multiline capture (Ctrl+Enter), recent notes | Search, pin/unpin, category, convert to task/reminder | `Notes` |
+| Notes | `lucide:notebook-pen` | Multiline capture (Ctrl+Enter), recent notes | Search, category filter chips, pin/unpin, archive/restore, convert to task/reminder | `Notes` |
 
 Key behaviors:
 
@@ -487,9 +502,11 @@ Key behaviors:
   completion (and snooze shifts only the current occurrence). Overdue reminders fire once
   ~1 s after startup. Custom recurrence is stored as `custom:<days>`.
 - **Notes** supports body-only capture (title derived from the first line), pinning,
-  search, and one-way conversion: "Create task" inserts a `Tasks` row (no due date,
-  normal priority) and "Create reminder" inserts a `Reminders` row due in one hour, then
-  calls `ModuleContext.RefreshModule` so the other module refreshes and reschedules.
+  search, category filtering, and archive/restore (soft hide via `IsArchived`, the note
+  stays in the database and can be restored from the Archived view). One-way conversion:
+  "Create task" inserts a `Tasks` row (no due date, normal priority) and "Create
+  reminder" inserts a `Reminders` row due in one hour, then calls
+  `ModuleContext.RefreshModule` so the other module refreshes and reschedules.
 
 Cross-module commands use the two `ModuleContext` callbacks: `OpenExpanded(moduleId)`
 (note/reminder/task row → dashboard, notification click) and `RefreshModule(moduleId)`
@@ -527,25 +544,60 @@ Key behaviors:
   with rounded caps, centered value/label and a value/target tooltip. Averages are
   computed over logged days in the 7-day window.
 
-### 11.9 Settings evolution
+### 11.9 Phase 4 modules (implemented in 1.6.0)
+
+Phase 4 adds read-oriented planning and insight modules on top of the same contract.
+They own no new tables: every widget and bucket is aggregated from the existing stores.
+
+| Module | Dock icon | Compact | Expanded | Data source |
+| --- | --- | --- | --- | --- |
+| Dashboard | `lucide:layout-dashboard` | DAILY OVERVIEW: focus minutes/sessions, tasks due, habit progress, medication, next up, health snapshot | Today at a glance, quick actions, six widgets (Focus 7-day bars, Tasks, Habits, Medication, Health, Reminders & Notes) | All stores, read-only |
+| Calendar | `lucide:calendar-days` | Today's agenda (up to 5), next 7 days, Plan today | Monday-start 6-week month grid with per-day entry counts and titles, selected-day agenda, quick add task/reminder | Tasks, Reminders, medication occurrences, FocusSessions |
+| Statistics | `lucide:chart-column` | 2×2 totals (focus, tasks, habit rate, medication adherence) + mini chart | Daily/Weekly/Monthly chips, four summary cards, metric chart, breakdown table | FocusSessions, Tasks, HabitLogs, MedicationLogs, HealthLogs |
+
+Key behaviors:
+
+- **Dashboard** builds one `DashboardSnapshot` per refresh (focus today plus seven daily
+  bars, task due/overdue/completed today, habit done/total and best streak, medication
+  taken/planned and next actionable dose, active/overdue reminders, note/pin/archive
+  counts, health today values and latest weight). Widgets and quick actions navigate via
+  `ModuleContext.OpenExpanded`, so editing stays in the owning module. A refresh timer
+  exists only while a view is loaded (60 s compact, 30 s expanded).
+- **Calendar** renders a fixed 42-cell Monday-start grid for the visible month. Weekends
+  in adjacent months are dimmed; a day cell shows its entry count and up to two titles
+  plus "+N more". Entries aggregate tasks by due date, reminders by effective due
+  (`COALESCE(SnoozeUntilUtc, DueUtc)`), planned medication occurrences from schedules
+  (existing log status included), and ended focus sessions. Quick add validates a title
+  and `h:mm` time (default 09:00), inserts a task or reminder through the owning store,
+  refreshes that module, and selects the edited day. Done entries are struck through and
+  overdue entries are shown in red.
+- **Statistics** buckets the last 7 days, 8 ISO weeks, or 6 calendar months. Focus sums
+  ended-session minutes, tasks count `CompletedUtc`, habit rate is completed check-ins ÷
+  (active habits × days in bucket), medication adherence is taken ÷ (taken + missed +
+  skipped), and health shows day-range averages. `StatsChart` builds the shared bar chart
+  (fixed 100 % scale for rate metrics) with value labels and tooltips; the table lists
+  every bucket with focus/tasks/habits/medication values. Granularity and metric
+  selections persist for the session and the view refreshes on a 60 s timer while loaded.
+
+### 11.10 Settings evolution
 
 The current settings window covers General, Appearance, **Modules** (enable/disable,
 hide/show in dock) and **Notifications** (master toggle + test). Later phases add Dock,
 Data & Backup, About, and per-module settings pages while keeping `settings.json` keys
 compatible and defaulting safely.
 
-### 11.10 Module phases
+### 11.11 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | ModuleManager, PopupHost, SQLite service, settings integration, notifications, scheduler | ✔ Done ✔ Tested (1.3.0) |
 | 2 | Focus, Tasks, Reminders, Quick Ideas/Notes | ✔ Done ✔ Tested (1.4.0) |
 | 3 | Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested (1.5.0) |
-| 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ◻ Pending |
+| 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ✔ Done ✔ Tested (1.6.0) |
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ◻ Pending |
 | 6 | Profiling, leak checks, migration/backup tests, startup/sleep/multi-monitor tests, installer readiness | ◻ Pending |
 
-### 11.11 Invariants for future work
+### 11.12 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.

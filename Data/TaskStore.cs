@@ -36,6 +36,15 @@ namespace RightDock.Data
         internal bool IsOverdue => !IsCompleted && DueUtc.HasValue && DueUtc.Value < DateTime.UtcNow;
     }
 
+    internal sealed class TaskCounts
+    {
+        internal int DueToday { get; set; }
+
+        internal int Overdue { get; set; }
+
+        internal int CompletedToday { get; set; }
+    }
+
     internal sealed class TaskStore
     {
         private const string BaseSelect = @"
@@ -125,6 +134,89 @@ WHERE t.ArchivedUtc IS NULL";
                 Services.Log.Error("Could not load a task.", ex);
                 return null;
             }
+        }
+
+        internal List<TaskItem> DueBetween(DateTime fromUtc, DateTime toUtc)
+        {
+            var items = new List<TaskItem>();
+            if (_database == null || !_database.IsAvailable) return items;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    BaseSelect + " AND t.DueUtc >= @from AND t.DueUtc < @to ORDER BY t.DueUtc, t.Priority DESC",
+                    Database.Param("@from", ModuleUtil.Iso(fromUtc)),
+                    Database.Param("@to", ModuleUtil.Iso(toUtc))))
+                {
+                    items.Add(Read(row));
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load tasks for a date range.", ex);
+            }
+
+            return items;
+        }
+
+        internal List<TaskItem> CompletedBetween(DateTime fromUtc, DateTime toUtc)
+        {
+            var items = new List<TaskItem>();
+            if (_database == null || !_database.IsAvailable) return items;
+
+            try
+            {
+                foreach (Dictionary<string, object> row in _database.Query(
+                    BaseSelect + @" AND t.IsCompleted = 1 AND t.CompletedUtc >= @from AND t.CompletedUtc < @to
+                      ORDER BY t.CompletedUtc",
+                    Database.Param("@from", ModuleUtil.Iso(fromUtc)),
+                    Database.Param("@to", ModuleUtil.Iso(toUtc))))
+                {
+                    items.Add(Read(row));
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not load completed tasks for a date range.", ex);
+            }
+
+            return items;
+        }
+
+        internal TaskCounts Counts(DateTime localToday)
+        {
+            var counts = new TaskCounts();
+            if (_database == null || !_database.IsAvailable) return counts;
+
+            DateTime start = localToday.Date.ToUniversalTime();
+            DateTime end = localToday.Date.AddDays(1).ToUniversalTime();
+
+            try
+            {
+                List<Dictionary<string, object>> rows = _database.Query(
+                    @"SELECT
+                        (SELECT COUNT(*) FROM Tasks WHERE ArchivedUtc IS NULL AND IsCompleted = 0
+                            AND DueUtc >= @start AND DueUtc < @end) AS DueToday,
+                        (SELECT COUNT(*) FROM Tasks WHERE ArchivedUtc IS NULL AND IsCompleted = 0
+                            AND DueUtc < @start) AS Overdue,
+                        (SELECT COUNT(*) FROM Tasks WHERE ArchivedUtc IS NULL AND IsCompleted = 1
+                            AND CompletedUtc >= @start AND CompletedUtc < @end) AS CompletedToday;",
+                    Database.Param("@start", ModuleUtil.Iso(start)),
+                    Database.Param("@end", ModuleUtil.Iso(end)));
+
+                if (rows.Count == 0) return counts;
+
+                Dictionary<string, object> row = rows[0];
+                counts.DueToday = Convert.ToInt32(row["DueToday"], CultureInfo.InvariantCulture);
+                counts.Overdue = Convert.ToInt32(row["Overdue"], CultureInfo.InvariantCulture);
+                counts.CompletedToday = Convert.ToInt32(row["CompletedToday"], CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex)
+            {
+                Services.Log.Error("Could not count tasks.", ex);
+            }
+
+            return counts;
         }
 
         internal List<TaskItem> ActiveForFocus(int limit)

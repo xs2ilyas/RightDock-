@@ -24,6 +24,10 @@ namespace RightDock.Modules.Notes
 
         internal string SearchText { get; private set; } = string.Empty;
 
+        internal string CategoryFilter { get; private set; } = string.Empty;
+
+        internal bool ShowArchived { get; private set; }
+
         internal string PendingEditId { get; set; }
 
         public override void Initialize(ModuleContext context)
@@ -55,9 +59,33 @@ namespace RightDock.Modules.Notes
             Changed?.Invoke();
         }
 
+        internal void SetCategory(string category)
+        {
+            CategoryFilter = category ?? string.Empty;
+            Changed?.Invoke();
+        }
+
+        internal void SetShowArchived(bool show)
+        {
+            ShowArchived = show;
+            Changed?.Invoke();
+        }
+
         internal List<NoteItem> Query()
         {
-            return _store?.Query(SearchText) ?? new List<NoteItem>();
+            return _store?.Query(SearchText,
+                string.IsNullOrWhiteSpace(CategoryFilter) ? null : CategoryFilter,
+                ShowArchived) ?? new List<NoteItem>();
+        }
+
+        internal List<string> Categories()
+        {
+            return _store?.Categories() ?? new List<string>();
+        }
+
+        internal int ArchivedCount()
+        {
+            return _store?.CountArchived() ?? 0;
         }
 
         internal List<NoteItem> QueryAll()
@@ -107,6 +135,12 @@ namespace RightDock.Modules.Notes
         internal void Delete(string noteId)
         {
             _store?.Delete(noteId);
+            Changed?.Invoke();
+        }
+
+        internal void SetArchived(string noteId, bool archived)
+        {
+            _store?.SetArchived(noteId, archived);
             Changed?.Invoke();
         }
 
