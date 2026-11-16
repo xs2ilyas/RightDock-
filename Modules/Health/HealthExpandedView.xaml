@@ -1,0 +1,92 @@
+<UserControl x:Class="RightDock.Modules.Health.HealthExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:RightDock.Modules.Health"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="460"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TODAY'S RINGS" Margin="1,0,0,6"/>
+
+                <UniformGrid Columns="3">
+                    <Border Style="{StaticResource MdCard}" Padding="8,12,8,8">
+                        <StackPanel>
+                            <local:RingView x:Name="WaterRing" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="WaterMeta" Style="{StaticResource MdCaption}"
+                                       HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource MdCard}" Padding="8,12,8,8" Margin="8,0,0,0">
+                        <StackPanel>
+                            <local:RingView x:Name="ActivityRing" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="ActivityMeta" Style="{StaticResource MdCaption}"
+                                       HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource MdCard}" Padding="8,12,8,8" Margin="8,0,0,0">
+                        <StackPanel>
+                            <local:RingView x:Name="SleepRing" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="SleepMeta" Style="{StaticResource MdCaption}"
+                                       HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="QUICK LOG" Margin="1,16,0,6"/>
+                <Border Style="{StaticResource MdCard}" Padding="10,5">
+                    <StackPanel x:Name="QuickPanel"/>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Column="1" Margin="16,0,0,0" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <Border Style="{StaticResource MdCard}" Padding="18">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Style="{StaticResource MdSectionTitle}" Text="WEIGHT" Margin="0"/>
+                            <TextBlock x:Name="WeightMeta" FontSize="10.5" Foreground="#8C8C8C"
+                                       HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <TextBlock x:Name="WeightValue" Style="{StaticResource MdValue}" Text="—"/>
+                        <TextBlock x:Name="WeightDetail" Style="{StaticResource MdCaption}" Margin="0,1,0,0"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                            <TextBox x:Name="WeightInput" Style="{StaticResource MdInput}" Width="110"
+                                     AutomationProperties.AutomationId="WeightInput"
+                                     VerticalContentAlignment="Center"/>
+                            <Button Style="{StaticResource MdPrimaryButton}" Content="Save weight"
+                                    Margin="8,0,0,0" Click="SaveWeight_Click"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="WeightError" Foreground="#FF9A9A" FontSize="11"
+                                   Margin="1,6,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource MdCard}" Margin="0,12,0,0" Padding="16">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Style="{StaticResource MdSectionTitle}" Text="LAST 7 DAYS" Margin="0"/>
+                            <TextBlock x:Name="WeekSummary" FontSize="10.5" Foreground="#8C8C8C"
+                                       HorizontalAlignment="Right"/>
+                        </Grid>
+                        <StackPanel x:Name="WeekPanel" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

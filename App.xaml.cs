@@ -2,6 +2,9 @@ using System;
 using System.Threading;
 using System.Windows;
 using RightDock.Modules.Focus;
+using RightDock.Modules.Habits;
+using RightDock.Modules.Health;
+using RightDock.Modules.Medication;
 using RightDock.Modules.Notes;
 using RightDock.Modules.Reminders;
 using RightDock.Modules.Tasks;
@@ -32,6 +35,9 @@ namespace RightDock
                 _services.Modules.Register(new TasksModule());
                 _services.Modules.Register(new RemindersModule());
                 _services.Modules.Register(new NotesModule());
+                _services.Modules.Register(new HabitsModule());
+                _services.Modules.Register(new MedicationModule());
+                _services.Modules.Register(new HealthModule());
                 _services.Start();
             }
             catch (Exception ex)

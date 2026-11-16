@@ -1,0 +1,120 @@
+<UserControl x:Class="RightDock.Modules.Medication.MedicationExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="440"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel>
+            <Grid Margin="1,0,0,6">
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="DOSE LOG" Margin="0"/>
+                <Button Style="{StaticResource MdGhostButton}" Content="+ New medication"
+                        FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Click="New_Click"/>
+            </Grid>
+
+            <WrapPanel>
+                <ToggleButton x:Name="ViewToday" Style="{StaticResource MdChip}" Content="Today"
+                              Tag="today" Click="View_Click"/>
+                <ToggleButton x:Name="ViewWeek" Style="{StaticResource MdChip}" Content="Last 7 days"
+                              Tag="week" Click="View_Click"/>
+            </WrapPanel>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,4,0,4"/>
+
+            <ScrollViewer MaxHeight="530" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="DosePanel"/>
+            </ScrollViewer>
+
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                       Text="No doses scheduled today."/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Column="1" Margin="16,0,0,0" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <Border Style="{StaticResource MdCard}" Padding="18">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock x:Name="EditorTitle" Style="{StaticResource MdTitle}" Text="New medication"/>
+                            <TextBlock x:Name="StatusText" FontSize="10.5" Foreground="#9CC7E9"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="NAME"/>
+                        <TextBox x:Name="NameInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="MedName"
+                                 TextChanged="Editor_TextChanged"/>
+
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="DOSAGE" Margin="1,12,0,6"/>
+                        <TextBox x:Name="DosageInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="MedDosage"
+                                 TextChanged="Editor_TextChanged"/>
+                        <TextBlock Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                                   Text="Free text, for example 1 tablet or 5 ml. No dosage advice is given."/>
+
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="DOSE TIMES" Margin="1,12,0,6"/>
+                        <TextBox x:Name="TimesInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="MedTimes"
+                                 TextChanged="Editor_TextChanged"/>
+                        <TextBlock Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                                   Text="Comma-separated 24-hour times, for example 08:00, 20:00."/>
+
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="DAYS" Margin="1,12,0,6"/>
+                        <WrapPanel>
+                            <ToggleButton x:Name="DaysEvery" Style="{StaticResource MdChip}" Content="Every day"
+                                          Tag="0,1,2,3,4,5,6" Click="Days_Click"/>
+                            <ToggleButton x:Name="DaysWeekdays" Style="{StaticResource MdChip}" Content="Weekdays"
+                                          Tag="1,2,3,4,5" Click="Days_Click"/>
+                            <ToggleButton x:Name="DaysWeekends" Style="{StaticResource MdChip}" Content="Weekends"
+                                          Tag="0,6" Click="Days_Click"/>
+                        </WrapPanel>
+
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTES" Margin="1,12,0,6"/>
+                        <TextBox x:Name="NotesInput" Style="{StaticResource MdInput}" Height="58"
+                                 AutomationProperties.AutomationId="MedNotes"
+                                 AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"/>
+
+                        <TextBlock x:Name="ErrorText" Foreground="#FF9A9A" FontSize="11" Margin="1,8,0,0"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button Style="{StaticResource MdPrimaryButton}" Content="Save medication"
+                                    Click="Save_Click"/>
+                            <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Clear"
+                                    Margin="8,0,0,0" HorizontalAlignment="Left" Click="Clear_Click"/>
+                            <Button x:Name="DeleteButton" Grid.Column="2" Style="{StaticResource MdDangerButton}"
+                                    Content="Delete" IsEnabled="False" Click="Delete_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource MdCard}" Margin="0,12,0,0" Padding="16">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Style="{StaticResource MdSectionTitle}" Text="MEDICATIONS" Margin="0"/>
+                            <TextBlock x:Name="MedCountText" FontSize="10.5" Foreground="#8C8C8C"
+                                       HorizontalAlignment="Right"/>
+                        </Grid>
+                        <StackPanel x:Name="MedPanel"/>
+                        <TextBlock x:Name="EmptyMeds" Style="{StaticResource MdCaption}" Margin="1,2,0,0"
+                                   Text="Add a medication to schedule doses."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

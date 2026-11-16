@@ -1,0 +1,46 @@
+<UserControl x:Class="RightDock.Modules.Medication.MedicationCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource MdCard}" Padding="10">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="TAKEN TODAY"/>
+                    <TextBlock x:Name="TakenValue" Style="{StaticResource MdValue}" Text="0 of 0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource MdCard}" Padding="10" Margin="8,0,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="NEXT DOSE"/>
+                    <TextBlock x:Name="NextValue" Style="{StaticResource MdValue}" Text="—"/>
+                    <TextBlock x:Name="NextName" Style="{StaticResource MdCaption}" Margin="0,-1,0,0"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Margin="1,14,0,6">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="TODAY'S DOSES" Margin="0"/>
+            <Button Style="{StaticResource MdGhostButton}" Content="Open dashboard"
+                    FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Click="Open_Click"/>
+        </Grid>
+
+        <Border Style="{StaticResource MdCard}" Padding="8,5">
+            <StackPanel x:Name="DosePanel"/>
+        </Border>
+
+        <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                   Text="No doses scheduled today."/>
+    </StackPanel>
+</UserControl>

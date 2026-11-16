@@ -1,6 +1,7 @@
 # RightDock — Project Architecture
 
-> Current release: **1.4.0** (launcher + Phase 1 infrastructure + Phase 2 productivity modules)
+> Current release: **1.5.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
+> modules + Phase 3 personal tracking modules)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
@@ -8,7 +9,8 @@ the right edge of the primary monitor. It reserves desktop work area through the
 AppBar protocol, launches pinned applications, and supports a 181-glyph outlined icon
 system, auto-hide with edge reveal, a five-tab settings popup, and a productivity layer:
 SQLite persistence, a module manager with compact/expanded popups, a centralized
-scheduler, in-app notification cards, and the Focus, Tasks, Reminders and Notes modules.
+scheduler, in-app notification cards, and the Focus, Tasks, Reminders, Notes, Habits,
+Medication, and Health & Lifestyle modules.
 
 All functionality is implemented in one WPF process. No WebViews, Electron, separate
 module executables, background services, or third-party UI frameworks are used.
@@ -295,7 +297,10 @@ productivity tables (`Tasks`, `TaskCategories`, `Projects`, `Reminders`,
 `FocusSessions`, `Habits`, `HabitLogs`, `Medications`, `MedicationSchedules`,
 `MedicationLogs`, `HealthLogs`, `Notes`, `LearningGoals`, `LearningSessions`,
 `AppSettings`, `ModuleSettings`) plus indices on due dates, completion state, log dates
-and updated timestamps.
+and updated timestamps. Version 2 (1.5.0) adds `MedicationLogs.SnoozeUntilUtc` and
+`IX_MedicationLogs_Status`, so snoozed doses and the missed-cutoff scan stay indexed.
+Habit logs are upserted on `(HabitId, LogDate)` and health logs on
+`(LogDate, MetricType)`.
 
 `ModuleSettings` stores `IsEnabled`, `IsVisible`, `SortOrder`, and `ConfigJson` per
 module id; `ModuleManager` loads it at startup and saves on every change. Disabling a
@@ -336,8 +341,9 @@ settings changes; startup registration is the only registry state the app owns.
 - Measured baseline: launcher-only 1.2.0 was **~76 MB working set, ~58 MB private,
   ≈0.2 % average CPU**; 1.3.0 with Phase 1 services idled at **~99 MB working set,
   ~59 MB private, ≈0.05 % of one core**; 1.4.0 with all four Phase 2 modules initialized
-  idles at **~123 MB working set, ~71 MB private, 0 % CPU over 30 s**
-  (Windows 11, 2560×1600 @125 %).
+  idled at **~123 MB working set, ~71 MB private, 0 % CPU over 30 s**; 1.5.0 with all
+  seven modules registered idles at **~124 MB working set, ~72 MB private, 0.02 CPU
+  seconds over 30 s** (Windows 11, 2560×1600 @125 %).
 
 These constraints are the benchmark for every new module: reuse the process, avoid
 polling, prefer timestamp math over per-item timers, load UI on demand.
@@ -366,7 +372,9 @@ dotnet build RightDock.csproj
 
 The master specification evolves RightDock into a productivity and life-management
 system while preserving everything above. **Phase 1 (core infrastructure) is implemented
-in 1.3.0**; the launcher, AppBar, auto-hide, icons and settings keep their contracts.
+in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, and Phase 3 (Habits,
+Medication, Health & Lifestyle) in 1.5.0**; the launcher, AppBar, auto-hide, icons and
+settings keep their contracts.
 
 ### 11.1 Layering
 
@@ -487,25 +495,57 @@ Cross-module commands use the two `ModuleContext` callbacks: `OpenExpanded(modul
 (note/reminder/task row → dashboard, notification click) and `RefreshModule(moduleId)`
 (conversions so the target module reloads immediately).
 
-### 11.8 Settings evolution
+### 11.8 Phase 3 modules (implemented in 1.5.0)
+
+The personal-tracking modules reuse the Phase 2 contract, views, theme and scheduler.
+
+| Module | Dock icon | Compact | Expanded | Persistence |
+| --- | --- | --- | --- | --- |
+| Habits | `lucide:target` | Done today, best streak, one-click check rows, `+` step for counter/duration | Habit list, boolean/counter/duration editor with target/unit, armed delete, LAST 7 DAYS dot matrix with streaks | `Habits`, `HabitLogs` |
+| Medication | `lucide:pill` | Taken today, next dose, today's doses with Take/Skip | Today / Last 7 days views, Take/Snooze/Skip, multi-time schedule editor, medication list | `Medications`, `MedicationSchedules`, `MedicationLogs` |
+| Health & Lifestyle | `lucide:heart-pulse` | Three rings (water/activity/sleep), quick log, latest weight | Rings, quick log for seven metrics, weight card, 7-day bars/averages table | `HealthLogs` |
+
+Key behaviors:
+
+- **Habits** seeds ten habits only when the table is empty. `ToggleToday` completes to the
+  target or clears the day; `AddDelta` steps duration by 5 minutes and other counters by
+  1, capped at the target. `HabitStore` loads a 400-day log window, anchors the current
+  streak to today or yesterday, computes the best streak, and upserts on
+  `(HabitId, LogDate)`. The week matrix renders the last seven local dates, oldest to
+  today.
+- **Medication** keeps medications, schedules and intake logs separate. `EnsureDoses`
+  backfills pending logs for the last six days (never before the medication was created)
+  and `MarkMissed` moves pending/snoozed doses older than two hours to `missed`.
+  Actionable doses are pending or snoozed; taken/skipped/missed rows are read-only.
+  Each actionable dose registers `med:dose:<logId>:<ticks>` (snoozed at
+  `SnoozeUntilUtc`), a `med:rollover` task materializes the next day at 00:00:02, and
+  firing shows `Medication · <name>` with the dosage and scheduled time. Dosage is free
+  text; the module gives no dosage advice.
+- **Health & Lifestyle** stores eight fixed metrics with targets and steps and upserts on
+  `(LogDate, MetricType)`; decrementing to zero deletes the day's value. `RingView` draws
+  a frozen ellipse track and a `StreamGeometry` arc (full `EllipseGeometry` at 100 %),
+  with rounded caps, centered value/label and a value/target tooltip. Averages are
+  computed over logged days in the 7-day window.
+
+### 11.9 Settings evolution
 
 The current settings window covers General, Appearance, **Modules** (enable/disable,
 hide/show in dock) and **Notifications** (master toggle + test). Later phases add Dock,
 Data & Backup, About, and per-module settings pages while keeping `settings.json` keys
 compatible and defaulting safely.
 
-### 11.9 Module phases
+### 11.10 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | ModuleManager, PopupHost, SQLite service, settings integration, notifications, scheduler | ✔ Done ✔ Tested (1.3.0) |
 | 2 | Focus, Tasks, Reminders, Quick Ideas/Notes | ✔ Done ✔ Tested (1.4.0) |
-| 3 | Habits, Medication, Health & Lifestyle | ◻ Pending |
+| 3 | Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested (1.5.0) |
 | 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ◻ Pending |
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ◻ Pending |
 | 6 | Profiling, leak checks, migration/backup tests, startup/sleep/multi-monitor tests, installer readiness | ◻ Pending |
 
-### 11.10 Invariants for future work
+### 11.11 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.

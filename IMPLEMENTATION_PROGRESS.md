@@ -1,8 +1,10 @@
 # RightDock — Implementation Progress
 
-> Release **1.4.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
-> (Focus, Tasks, Reminders, Notes) complete.
-> Next up: **Phase 3** (Habits, Medication, Health & Lifestyle).
+> Release **1.5.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
+> Health & Lifestyle) complete.
+> Next up: **Phase 4** (dashboard, daily overview, notes manager, calendar/planner,
+> statistics).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -19,8 +21,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.2.0 | Settings popup (auto-hide, icon color, startup) | ✔ Done ✔ Tested |
 | v1.3.0 | Phase 1: Module manager, popup host, SQLite, scheduler, notifications, settings integration | ✔ Done ✔ Tested |
 | v1.4.0 | Phase 2: Focus, Tasks, Reminders, Quick Ideas / Notes | ✔ Done ✔ Tested |
+| v1.5.0 | Phase 3: Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
-| Phase 3 | Habits, Medication, Health & Lifestyle | ◻ Pending |
 | Phase 4 | Dashboard, Daily Overview, Notes, Calendar, Statistics | ◻ Pending |
 | Phase 5 | Breathing, Screen-break, Learning tracker | ◻ Pending |
 | Phase 6 | Profiling, leak/migration/backup/multi-monitor testing | ◻ Pending |
@@ -251,7 +253,99 @@ appear in the dock and Modules settings with their data loaded from SQLite.
 
 ---
 
-## 7. Documentation and repository (completed)
+## 7. v1.5.0 — Phase 3 personal tracking modules (completed, tested)
+
+Three modules are registered after Notes in `App.OnStartup`; they appear in the dock and
+in Settings → Modules, and follow the established compact/expanded view pattern over a
+store with a `Changed` event.
+
+### Habits (`Modules/Habits`)
+- Ten habits are seeded **once**, only when the `Habits` table is empty: Drink water
+  (counter, 8 glasses), Exercise (duration, 30 min), Read (20 min), Meditate (10 min),
+  Walk outside (20 min), Journal, No sugar, Stretch, Vitamins (boolean) and Eat
+  vegetables (counter, 3 servings). User deletions are never re-seeded.
+- Custom habits support boolean / counter / duration tracking with a target and unit;
+  the editor disables target/unit for boolean habits and validates targets in 1…1,000,000.
+- Compact: "Done today x of y", best streak, one-click round check, and a `+` step for
+  counter/duration habits (duration steps by 5 minutes, everything else by 1, capped at
+  the target). Completed rows show "n-day streak".
+- Expanded: full habit list with inline toggles, editor (name, description, tracking
+  type chips, target, unit), armed delete, and a LAST 7 DAYS matrix with a filled dot per
+  completed day plus the current streak.
+- `HabitStore` reads 400 days of logs, computes current streak (consecutive days ending
+  today or yesterday, so an unfinished today does not break it) and best streak, and
+  upserts logs on `(HabitId, LogDate)`, so toggling and `+`/`−` share one row per day.
+  Deleting a habit cascades its logs.
+
+### Medication (`Modules/Medication`)
+- `Medications`, `MedicationSchedules` and `MedicationLogs` stay separate: a medication
+  owns one row per dose time, with every-day/weekdays/weekends applicability.
+- `EnsureDoses()` materializes pending logs for the last six days (bounded by the
+  medication's creation time so a new medication does not create phantom past doses) and
+  for today, then `MarkMissed()` rolls any pending/snoozed dose older than two hours
+  (relative to `COALESCE(SnoozeUntilUtc, ScheduledUtc)`) to `missed`.
+- Statuses: pending → taken (records `TakenUtc`), skipped, snoozed (`SnoozeUntilUtc`)
+  or missed. Take/Snooze/Skip appear only for actionable (pending/snoozed) doses; the
+  last-7-days view is read-only and grouped by local date descending.
+- Scheduler keys `med:dose:<logId>:<ticks>` are rebuilt on activation and every mutation;
+  snoozed doses are scheduled at `SnoozeUntilUtc`. Firing shows
+  "Medication · <name> / <dosage> · scheduled for HH:mm." and opens the dashboard on
+  click. A `med:rollover` task at tomorrow 00:00:02 materializes the next day's doses.
+- The editor accepts comma/semicolon/space-separated 24-hour times (normalized to HH:mm,
+  sorted, de-duplicated) and rejects empty names or invalid times with inline red text.
+  No dosage recommendations are shown — dosage is free text for the user's own label.
+
+### Health & Lifestyle (`Modules/Health`)
+- Eight metrics with fixed targets/steps/colors: water 8 glasses, meals 3, sleep 8 h
+  (0.5 step), activity 30 min (5 min step), vegetables 3 servings, fruits 2 servings,
+  relaxation 15 min (5 min step) and weight in kg (measured value).
+- Quick log rows with `−`/`+` for the seven cumulative metrics; values below zero delete
+  the day's row. `HealthStore` upserts on `(LogDate, MetricType)` and computes today's
+  value, 7-day average, days logged and latest weight.
+- Compact: three rings (water/activity/sleep) with value and target, quick log, and the
+  latest weight line. Expanded: rings, quick log for seven metrics, a weight card with
+  latest/7-day average/days logged, and a LAST 7 DAYS table with per-metric day bars,
+  averages and entry counts.
+- `RingView` is a code-only ring: a #26FFFFFF ellipse track plus a stroked arc built with
+  `StreamGeometry` (an `EllipseGeometry` at 100 %), rounded caps, centered value and
+  label, and a value/target tooltip.
+
+### Shared work
+- Schema migration **v2** adds `MedicationLogs.SnoozeUntilUtc` and
+  `IX_MedicationLogs_Status`; it applies to existing 1.4.0 databases in place
+  (`PRAGMA user_version` 1 → 2).
+- Habit logs use a unique `(HabitId, LogDate)` index and `ON CONFLICT` upserts; health
+  logs use `UNIQUE(LogDate, MetricType)`.
+- New editor inputs expose automation ids (`HabitName`, `HabitDescription`,
+  `HabitTarget`, `HabitUnit`, `MedName`, `MedDosage`, `MedTimes`, `MedNotes`,
+  `WeightInput`) and action buttons expose descriptive automation names
+  ("Toggle habit X", "Increment habit X", "Take/Snooze/Skip X at HH:mm").
+
+### Verified on a live Windows 11 session
+- **Habits:** the database migrated to `user_version=2` and exactly 10 habits seeded;
+  Drink water toggled to 8/8 (streak 1 day), two `+` taps took Exercise to 10/30 min and
+  Journal completed → "2 of 10", "1 day"; the dashboard showed checkmarks, streak meta
+  and the week matrix; a custom "Test habit" (counter, 4 cups) saved, incremented to
+  1/4, survived a restart, then deleted with its log; backfilled Nov 14–15 water logs
+  produced three filled dots (Sat/Sun/Mon) and a 3-day/best-streak.
+- **Medication:** created "Vitamin D" 1 tablet at 12:35 and 20:00 → two pending doses;
+  taking the 20:00 dose early recorded "Taken 12:32"; at 12:35 the toast read
+  "Medication · Vitamin D / 1 tablet · scheduled for 12:35."; snooze 10 min stored
+  `SnoozeUntilUtc` 12:46 and displayed "Snoozed · 12:46"; skip stored `skipped` and
+  hid the actions; a backdated medication materialized four days of 09:00 doses, all
+  marked Missed, and the week view grouped Today/Sun/Sat/Fri; deleting the medication
+  removed its schedules and logs (cascade).
+- **Health:** quick log produced 2/8 glasses, 1/3 meals, 5/30 min and 0.5/8 h; rings
+  rendered colored arcs; weight 72.5 kg saved with "7-day average 72.5 kg · 1 of 7 days
+  logged"; `abc` showed "Enter a weight in kilograms, for example 72.4." and left data
+  unchanged; the last-7-days table showed today's bars, per-metric averages and
+  "4 entries logged".
+- **Persistence/integration:** habits, medication statuses and health values survived
+  two restarts; all Phase 2 popups still open; single process; no errors logged.
+
+---
+
+## 8. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -261,30 +355,31 @@ appear in the dock and Modules settings with their data loaded from SQLite.
 
 ---
 
-## 8. Measured resource baseline
+## 9. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
-visible, all four Phase 2 modules registered, no popups open, 30 s idle sample):
+visible, all seven modules registered, no popups open, 30 s idle sample):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | ≈123 MB |
-| Private bytes | ≈71 MB |
-| Idle CPU | 0 CPU seconds over 30 s → 0 % |
+| Working set | ≈124 MB |
+| Private bytes | ≈72 MB |
+| Idle CPU | 0.02 CPU seconds over 30 s → ≈0.07 % of one core |
 | Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; animation timer only during slides |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
 
 Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
 ≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
-≈123 MB / ≈71 MB / 0 %. The step from 1.3.0 is the four module WPF views (loaded on
-first open) plus module stores; idle CPU stays at zero. Phase 6 will repeat this with
-profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
+≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %. The Phase 3 step is
+small because the new stores only query short date windows and the three WPF views load
+on first open. Phase 6 will repeat this with profiling tools, memory-leak checks, and
+idle-vs-active comparisons per module.
 
 ---
 
-## 9. Known limitations (current release)
+## 10. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -318,12 +413,21 @@ profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
   in each expanded view.
 - **Settings window is fixed-size** (500×520, five tabs); future categories will require
   a scrollable layout.
+- **Habit streaks use a 400-day window** — current/best streaks are computed from logs in
+  the last 400 days (enough for daily habits); longer history is not considered.
+- **Habit week view covers 7 days** — the dashboard matrix shows the current week; longer
+  trends arrive with Statistics in Phase 4.
+- **Medication doses are materialized on refresh** — the last six days (bounded by the
+  medication's creation time) plus today; doses older than two hours without action are
+  marked missed. There is no adherence percentage, refill tracking, or inventory count.
+- **Health metrics are fixed** — the eight metrics have preset targets, units and steps;
+  user-defined metrics require the per-module settings page planned for a later phase.
 - **No backup/restore/export/import** — the SQLite file can be copied manually while the
   app is closed; first-class data tools arrive in Phase 6.
 
 ---
 
-## 10. Pending roadmap
+## 11. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -344,12 +448,12 @@ profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
 - [x] Reminders: one-time/daily/weekly/custom recurrence, snooze, complete, history.
 - [x] Quick Ideas / Notes: capture, pin, search, convert to task/reminder.
 
-### Phase 3 — Personal tracking
-- [ ] Habits: boolean/counter/duration, 10 seeded habits + custom, daily/weekly history,
-      streaks, one-click completion from compact popup.
-- [ ] Medication: schedules vs intake logs stored separately, daily/weekly views,
+### Phase 3 — Personal tracking (completed in 1.5.0)
+- [x] Habits: boolean/counter/duration, 10 seeded habits + custom, daily/weekly history,
+      streaks, one-click completion from the compact popup.
+- [x] Medication: schedules vs intake logs stored separately, daily/weekly views,
       taken/skipped/snoozed/missed, no dosage recommendations.
-- [ ] Health & Lifestyle: water, meals, sleep, relaxation, vegetables, fruits, activity,
+- [x] Health & Lifestyle: water, meals, sleep, relaxation, vegetables, fruits, activity,
       weight; rings, averages, history.
 
 ### Phase 4 — Expanded workspace
@@ -373,7 +477,7 @@ profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
 
 ---
 
-## 11. Acceptance criteria tracking
+## 12. Acceptance criteria tracking
 
 From the master specification §11:
 
@@ -382,15 +486,15 @@ From the master specification §11:
 | 1 | Existing application launching unchanged | ✔ Tested |
 | 2 | Existing custom icons still work | ✔ Tested |
 | 3 | Dock approximately 50 px wide | ✔ Tested |
-| 4 | Productivity modules open as compact popups | ✔ Tested (Focus, Tasks, Reminders, Notes at 320 DIP) |
+| 4 | Productivity modules open as compact popups | ✔ Tested (all seven at 320 DIP) |
 | 5 | Expanded workspace works | ✔ Tested (980×680 dashboard per module) |
 | 6 | Compact and expanded views share data | ✔ Tested (both views over one store, rebuilt on change) |
 | 7 | Tasks persist after restart | ✔ Tested |
 | 8 | Reminders work correctly | ✔ Tested (fire, toast, snooze, complete, overdue on startup) |
 | 9 | Recurring schedules work | ✔ Tested (daily/weekly/monthly tasks, daily/weekly/custom-N reminders) |
 | 10 | Focus sessions record accurate durations | ✔ Tested (planned vs actual seconds, pause segments) |
-| 11 | Habits retain daily/weekly history | ◻ Pending (Phase 3) |
-| 12 | Medication schedules and intake logs separate | ◻ Pending (Phase 3) |
+| 11 | Habits retain daily/weekly history | ✔ Tested (10 seeded + custom habits, 7-day matrix, 3-day streak across restart) |
+| 12 | Medication schedules and intake logs separate | ✔ Tested (`Medications`/`MedicationSchedules`/`MedicationLogs`, pending→taken/skipped/snoozed/missed) |
 | 13 | Quick Ideas / Notes saves information | ✔ Tested (capture, pin, search, convert) |
 | 14 | Breathing sessions function | ◻ Pending (Phase 5) |
 | 15 | Screen-break reminders function | ◻ Pending (Phase 5) |
@@ -399,20 +503,29 @@ From the master specification §11:
 | 18 | Backup and restore work | ◻ Pending (Phase 6) |
 | 19 | No mandatory internet access | ✔ Tested (no network code) |
 | 20 | No unnecessary background processes | ✔ Tested (single process) |
-| 21 | CPU and memory measured | ✔ Baseline recorded (§8); full profiling Phase 6 |
+| 21 | CPU and memory measured | ✔ Baseline recorded (§9); full profiling Phase 6 |
 | 22 | Launcher functionality not broken | ✔ Tested |
 
 ---
 
-## 12. Test method notes
+## 13. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
   the dock's UIA tree, so window-scoped searches must attach directly to the HWND
   (`AutomationElement.FromHandle`). Tab buttons and module inputs expose `AutomationId`s
   (`TabModules`, `TabNotifications`, `TaskTitle`, `TaskDue`, `TaskSearch`, `ReminderTitle`,
-  `ReminderDue`, `ReminderCustomDays`, `NoteTitle`, `NoteBody`, `NoteCapture`, …); module
-  toggles use `TogglePattern`, links and buttons use `InvokePattern`.
+  `ReminderDue`, `ReminderCustomDays`, `NoteTitle`, `NoteBody`, `NoteCapture`,
+  `HabitName`, `HabitDescription`, `HabitTarget`, `HabitUnit`, `MedName`, `MedDosage`,
+  `MedTimes`, `MedNotes`, `WeightInput`, …); module list rows, chips and round checks
+  have descriptive automation names ("Toggle habit Drink water", "Take Vitamin D at
+  12:35", "Add Water"), module toggles use `TogglePattern`, links and buttons use
+  `InvokePattern`.
+- **`InvokePattern` on a WPF `Button` does raise `Click`** — used for row/edit/delete
+  buttons because it works without scrolling the target into view; real mouse clicks are
+  still used for chips, round checks and popup dismissal.
+- **Context menus are separate top-level windows** — snooze menus must be clicked with
+  a global search (`clickglobal`) after opening the anchor button.
 - **WPF text boxes surface as `ControlType.Edit`** in UIA, not "TextBox"; filter on
   ControlType.Edit when dumping elements, and prefer `ValuePattern` for typing.
 - **`TogglePattern.Toggle()` is not a real click** — it flips `IsChecked` visually but
@@ -426,8 +539,16 @@ From the master specification §11:
   coordinates (125 % scaling → 80 % values), so UIA queries must set `SetProcessDPIAware`
   before computing click points.
 - Persistence verified by closing/restarting the app and re-reading `pins.json`,
-  `settings.json`, the Run registry value, and the Phase 2 tables (`Tasks`, `Reminders`,
-  `Notes`, `FocusSessions`) directly from `rightdock.db`.
+  `settings.json`, the Run registry value, and the productivity tables (`Tasks`,
+  `Reminders`, `Notes`, `FocusSessions`, `Habits`, `HabitLogs`, `Medications`,
+  `MedicationSchedules`, `MedicationLogs`, `HealthLogs`) directly from `rightdock.db`
+  with Python's `sqlite3` module.
+- Missed-dose and streak behavior were seeded through the database (a medication row
+  created three days earlier, prior-day habit logs) and then re-checked in the UI after
+  a restart, exercising the same `EnsureDoses`/`MarkMissed`/streak code paths the app
+  uses at runtime.
+- Toast reminders for medication were captured with `tools/watch-toast.ps1` (12:35
+  dose); the snooze context menu was driven through global UIA clicks.
 - Notifications were verified with timed DPI-aware screen captures and a watcher that
   polls for visible topmost windows (titleless, 200–700 × 40–400 DIP) because shell
   balloon/toast notifications were suppressed by the environment; `tools/watch-toast.ps1`

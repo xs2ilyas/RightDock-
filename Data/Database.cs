@@ -201,6 +201,10 @@ CREATE TABLE IF NOT EXISTS ModuleSettings (
     ConfigJson TEXT NOT NULL DEFAULT '{}',
     UpdatedUtc TEXT NOT NULL
 );
+"),
+            (2, @"
+ALTER TABLE MedicationLogs ADD COLUMN SnoozeUntilUtc TEXT;
+CREATE INDEX IF NOT EXISTS IX_MedicationLogs_Status ON MedicationLogs(Status, ScheduledUtc);
 ")
         };
 

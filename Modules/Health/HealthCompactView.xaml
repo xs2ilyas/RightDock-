@@ -1,0 +1,50 @@
+<UserControl x:Class="RightDock.Modules.Health.HealthCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:RightDock.Modules.Health"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <UniformGrid Columns="3">
+            <Border Style="{StaticResource MdCard}" Padding="6,10,6,8">
+                <StackPanel>
+                    <local:RingView x:Name="WaterRing" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="WaterMeta" Style="{StaticResource MdCaption}"
+                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource MdCard}" Padding="6,10,6,8" Margin="7,0,0,0">
+                <StackPanel>
+                    <local:RingView x:Name="ActivityRing" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="ActivityMeta" Style="{StaticResource MdCaption}"
+                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource MdCard}" Padding="6,10,6,8" Margin="7,0,0,0">
+                <StackPanel>
+                    <local:RingView x:Name="SleepRing" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="SleepMeta" Style="{StaticResource MdCaption}"
+                               HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <Grid Margin="1,14,0,6">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="QUICK LOG" Margin="0"/>
+            <Button Style="{StaticResource MdGhostButton}" Content="Open dashboard"
+                    FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Click="Open_Click"/>
+        </Grid>
+
+        <Border Style="{StaticResource MdCard}" Padding="8,5">
+            <StackPanel x:Name="QuickPanel"/>
+        </Border>
+
+        <TextBlock x:Name="WeightText" Style="{StaticResource MdCaption}" Margin="1,8,0,0"
+                   Text="No weight logged yet."/>
+    </StackPanel>
+</UserControl>

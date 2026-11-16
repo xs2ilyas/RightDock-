@@ -8,10 +8,89 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Phase 3 personal tracking: Habits, Medication, Health & Lifestyle.
+- Phase 4 expanded workspace: dashboard, daily overview, notes manager, calendar/planner,
+  statistics.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.5.0] — 2026-11-16 — Phase 3 personal tracking modules
+
+### Added
+- **Habits module** (`Modules/Habits/`) — 10 seeded habits on first run (Drink water,
+  Exercise, Read, Meditate, Walk outside, Journal, No sugar, Stretch, Vitamins, Eat
+  vegetables) plus custom boolean/counter/duration habits with target and unit.
+  One-click complete from the compact popup, a `+` step control for counter/duration
+  habits, current and best streaks, a 7-day completion matrix, and full add/edit/delete
+  from the dashboard. `HabitStore` computes streaks over a 400-day log window anchored
+  to today or yesterday and upserts daily values on `(HabitId, LogDate)`.
+- **Medication module** (`Modules/Medication/`) — medications, schedules and intake logs
+  are stored separately (`Medications`, `MedicationSchedules`, `MedicationLogs`).
+  Multi-time daily schedules on every day/weekdays/weekends, dose materialization for
+  the last 6 days bounded by the medication's creation time, and statuses
+  pending/taken/skipped/snoozed/missed (doses older than 2 h without action roll to
+  missed). Today and last-7-days views, take/snooze (10/15/30/60 min)/skip actions,
+  toast reminders with click-to-open, rescheduling of snoozed doses, and a midnight
+  rollover task that materializes the next day. No dosage advice is displayed.
+- **Health & Lifestyle module** (`Modules/Health/`) — eight metrics (water, meals,
+  sleep, activity, vegetables, fruits, relaxation, weight) with per-metric targets and
+  steps. Quick-log `−`/`+` rows, three code-drawn progress rings (water, activity,
+  sleep), today's values, a weight entry with latest value, 7-day average and days
+  logged, and a last-7-days bar table with averages. `HealthStore` upserts on
+  `(LogDate, MetricType)`.
+- `RingView` (`Modules/Health/RingView.cs`) — a code-only WPF ring control using a
+  stroked track plus a `StreamGeometry`/`EllipseGeometry` arc, rounded caps and centered
+  value/label.
+- Schema migration **v2**: `MedicationLogs.SnoozeUntilUtc` plus
+  `IX_MedicationLogs_Status` for status/cutoff queries.
+- Automation ids for the new editors (`HabitName`, `HabitDescription`, `HabitTarget`,
+  `HabitUnit`, `MedName`, `MedDosage`, `MedTimes`, `MedNotes`, `WeightInput`).
+
+### Changed
+- Three new modules registered in `App.OnStartup` after Notes; the dock now shows
+  Habits (`lucide:target`), Medication (`lucide:pill`) and Health & Lifestyle
+  (`lucide:heart-pulse`) and all three appear in Settings → Modules.
+- Habits are seeded exactly once, only when the `Habits` table is empty, so user edits
+  and deletions are never re-seeded.
+- Medication reminders use scheduler keys `med:dose:<logId>:<ticks>` plus
+  `med:rollover`; all keys are cancelled on deactivation and rebuilt on every refresh.
+- Version 1.5.0.
+
+### Verified
+- Habits: 10 seeded rows appeared; completing Drink water wrote 8/8 with a 1-day
+  streak, two `+` taps moved Exercise to 10/30 min, completing Journal updated "2 of
+  10" and "1 day"; a custom counter habit (target 4 cups) saved, incremented and
+  persisted across restart, then deleted with its history; backfilled prior-day logs
+  produced filled week dots and a 3-day streak/best streak.
+- Medication: saved Vitamin D 1 tablet at 12:35 and 20:00 → two pending doses; taking
+  the 20:00 dose early showed "Taken 12:32"; the 12:35 dose toasted "Medication ·
+  Vitamin D / 1 tablet · scheduled for 12:35."; snooze 10 min moved it to 12:46 and
+  rescheduled; skip moved it to Skipped; a backdated medication (created 3 days ago)
+  materialized four daily doses and all rolled to Missed; the last-7-days view grouped
+  Today/Sun/Sat/Fri correctly; deleting the medication cascaded its schedules and logs.
+- Health: quick log produced 2/8 glasses, 1/3 meals, 5/30 min and 0.5/8 h; rings drew
+  colored arcs; weight 72.5 kg saved with a 7-day average and "1 of 7 days logged";
+  invalid weight text showed inline red text without changing data; the last-7-days
+  table showed per-metric bars, averages and "4 entries logged".
+- Restart persistence for habits (values, streak, custom habit), medication statuses
+  and health logs; all Phase 2 popups still open (Focus, Tasks, Reminders, Notes);
+  single process; no errors in `rightdock.log`.
+- Idle baseline on the shipped 1.5.0 build: ≈124 MB working set, ≈72 MB private bytes,
+  0.02 CPU seconds over 30 s.
+
+### Files
+- Added: `Data/HabitStore.cs`, `Data/MedicationStore.cs`, `Data/HealthStore.cs`,
+  `Modules/Habits/HabitsModule.cs`, `Modules/Habits/HabitsCompactView.xaml(.cs)`,
+  `Modules/Habits/HabitsExpandedView.xaml(.cs)`, `Modules/Medication/MedicationModule.cs`,
+  `Modules/Medication/MedicationFormat.cs`,
+  `Modules/Medication/MedicationCompactView.xaml(.cs)`,
+  `Modules/Medication/MedicationExpandedView.xaml(.cs)`,
+  `Modules/Health/HealthModule.cs`, `Modules/Health/RingView.cs`,
+  `Modules/Health/HealthCompactView.xaml(.cs)`,
+  `Modules/Health/HealthExpandedView.xaml(.cs)`.
+- Modified: `App.xaml.cs`, `Data/Database.cs`, `RightDock.csproj`.
 
 ---
 
