@@ -1,0 +1,43 @@
+<UserControl x:Class="RightDock.Modules.Learning.LearningCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Style="{StaticResource MdCard}" Padding="10">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="ACTIVE GOALS"/>
+                    <TextBlock x:Name="ActiveValue" Style="{StaticResource MdValue}" Text="0"
+                               AutomationProperties.AutomationId="LearningActiveValue"/>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource MdCard}" Padding="10" Margin="8,0,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource MdSectionTitle}" Text="THIS WEEK"/>
+                    <TextBlock x:Name="WeekValue" Style="{StaticResource MdValue}" Text="0 min"
+                               AutomationProperties.AutomationId="LearningWeekValue"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Margin="1,14,0,0">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="LEARNING GOALS" Margin="0"/>
+            <Button Style="{StaticResource MdGhostButton}" Content="Open" FontSize="10.5"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="Open_Click"/>
+        </Grid>
+
+        <StackPanel x:Name="GoalPanel" Margin="0,4,0,0"/>
+
+        <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,2,0,0"
+                   Text="No active goals yet."/>
+    </StackPanel>
+</UserControl>

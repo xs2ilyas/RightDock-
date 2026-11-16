@@ -1,10 +1,10 @@
 # RightDock — Implementation Progress
 
-> Release **1.6.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.7.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
-> Statistics) complete.
-> Next up: **Phase 5** (breathing, screen-break reminder, learning tracker).
+> Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) complete.
+> Next up: **Phase 6** (hardening, profiling, migration/backup and installer readiness).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -23,8 +23,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.4.0 | Phase 2: Focus, Tasks, Reminders, Quick Ideas / Notes | ✔ Done ✔ Tested |
 | v1.5.0 | Phase 3: Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested |
 | v1.6.0 | Phase 4: Dashboard, Daily Overview, Notes manager, Calendar planner, Statistics | ✔ Done ✔ Tested |
+| v1.7.0 | Phase 5: Quick Tools (notes, breathing, screen breaks) + Learning tracker | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
-| Phase 5 | Breathing, Screen-break, Learning tracker | ◻ Pending |
 | Phase 6 | Profiling, leak/migration/backup/multi-monitor testing | ◻ Pending |
 
 ---
@@ -435,7 +435,80 @@ the Notes manager uses the existing `Notes.IsArchived` column.
 
 ---
 
-## 9. Documentation and repository (completed)
+## 9. v1.7.0 — Phase 5 quick tools and learning (completed, tested)
+
+Phase 5 adds two modules. Quick Tools is deliberately limited to exactly three tools:
+quick note capture, guided breathing and screen-break reminders. Learning adds goals,
+courses/reading targets, sessions and progress. No stopwatch, calculator, clipboard
+manager, file manager or journal was added.
+
+### Quick Tools (`Modules/QuickTools`, dock icon `lucide:sparkles`)
+- `QuickToolsModule` composes the existing Notes store with a new `BreathingStore` and
+  module config. The one 1 s `DispatcherTimer` exists only while a breathing session runs.
+- **Quick note** writes through `NoteStore.Add` with category `Quick` and calls
+  `ModuleContext.RefreshModule("notes")`, so the note appears immediately in the Notes
+  module and Dashboard. Compact capture supports Ctrl+Enter; the expanded view shows the
+  last notes with a shortcut to the Notes module.
+- **Breathing** offers Box (4-4-4-4), 4-7-8, Calm (4 in · 6 out) and Coherent (5 in ·
+  5 out). The module tracks phase, countdown, cycles and elapsed seconds; start 3/5/8
+  cycles, pause/resume, stop. The expanded view animates a circle (ScaleTransform,
+  0.9 s per tick, 0.74–1.0). Completed or stopped sessions with cycles > 0 are saved to
+  `BreathingSessions` (pattern key/name, cycles, duration, UTC start/end).
+- **Screen break** settings (`ScreenBreakEnabled`, `ScreenBreakMinutes` 1–240,
+  `LastBreakDate`, `BreaksToday`, `BreathPattern`) persist in
+  `ModuleSettings.ConfigJson`. Enabling registers the fixed-interval scheduler key
+  `quicktools:screenbreak`; firing shows the "Screen break" toast with 20-20-20 guidance
+  and opens the expanded view on click. "Remind now" fires on demand; reset restarts the
+  interval; disabling or deactivating cancels the scheduler.
+- Compact sections: QUICK NOTE, BREATHE (pattern chips, countdown, phase bar, cycle
+  presets, start/pause/stop) and SCREEN BREAK (toggle, next reminder, breaks today,
+  15/30/45/60 chips, Remind now).
+
+### Learning (`Modules/Learning`, dock icon `lucide:graduation-cap`)
+- `LearningStore` over the existing `LearningGoals` and `LearningSessions` tables with no
+  migration: goals store title, description, category, target/progress values, unit, due
+  date (`yyyy-MM-dd`), completed flag and timestamps; sessions store start, duration,
+  notes and an optional goal (`ON DELETE SET NULL`).
+- Goal categories are Course/Reading/Skill/Other; units minutes/hours/pages/chapters/
+  lessons/sessions. Compact shows active goals, this-week minutes and up to four goals
+  with progress bars.
+- Expanded view: search over title/description/category, All/Active/Completed chips,
+  dynamic category chips, scrollable goal list with selection, goal editor (title,
+  category, unit, target, progress, due date, description), complete/reopen, armed
+  delete, and a log-session form with minutes/notes and the three most recent sessions.
+- Logging a session on a minutes or hours goal adds the minutes to `ProgressValue`
+  automatically (hours converted, two-decimal rounding); other units advance only through
+  the progress field. Week statistics start Monday.
+
+### Verified on a live Windows 11 session
+- **Dock/registration:** all twelve modules appear in order Dashboard, Focus, Tasks,
+  Reminders, Notes, Habits, Medication, Health & Lifestyle, Calendar, Statistics,
+  Quick Tools, Learning; launch, settings and existing pins unchanged.
+- **Quick note:** saved "Phase 5 quick note" from the compact with Ctrl+Enter; Notes count
+  went 1 → 2, the note appeared in Notes under category Quick, and the input cleared with
+  the status message.
+- **Breathing:** start/pause/resume/stop saved 1 cycle and 19 s; a full 5-cycle Box
+  session completed after 80 s with "Complete · 5 cycles · 1 min"; `BreathingSessions`
+  rows were present; the expanded view showed the animated circle and session history.
+- **Screen break:** enabling with 15 min showed "Next HH:mm"; Remind now produced the
+  toast, incremented Breaks today and persisted
+  `{"ScreenBreakEnabled":true,"ScreenBreakMinutes":15,…}`; a restart restored On/15 min/
+  1 break/Box/2 notes; a custom 1-minute interval fired another toast automatically;
+  settings were reset to off/30 min.
+- **Learning:** created "Spanish Course" (Course, hours, target 10, due 2026-12-31),
+  logged 30 min → progress "0.5 / 10 hours" plus a session row; completed and reopened;
+  created "Read Atomic Habits" (Reading, pages, 240, progress 50); search and category
+  filters returned the correct rows; editing the target retained progress; armed delete
+  removed the goal while retaining its session; after restart one active goal remained
+  with 30 min this week.
+- **Residual checks:** Dashboard and earlier modules unchanged; single process; no errors
+  in `%APPDATA%\RightDock\logs`; idle after Phase 5 measured at 126.8 MB working set,
+  71.5 MB private and 0.047 CPU seconds over 30 s. Phase 5 test data was removed from the
+  live database before release.
+
+---
+
+## 10. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -445,32 +518,33 @@ the Notes manager uses the existing `Notes.IsArchived` column.
 
 ---
 
-## 10. Measured resource baseline
+## 11. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
-visible, all ten modules registered and every Phase 4 view opened once, no popups open,
-30 s idle sample):
+visible, all twelve modules registered, no popups open, 30 s idle sample):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | ≈146 MB |
-| Private bytes | ≈94 MB |
-| Idle CPU | 0.078 CPU seconds over 30 s → ≈0.26 % of one core |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides |
+| Working set | 126.8 MB |
+| Private bytes | 71.5 MB |
+| Idle CPU | 0.047 CPU seconds over 30 s |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
 
 Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
 ≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
 ≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %; 1.6.0 Phase 4 after
-opening all views ≈146 MB / ≈94 MB / ≈0.26 %. The increase comes from WPF caching the
-Dashboard, Calendar and Statistics visual trees after first open; Phase 6 will repeat
-this with profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
+opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB / 71.5 MB /
+0.047 CPU seconds over 30 s. The Phase 4 figure includes WPF caching Dashboard, Calendar
+and Statistics visual trees after first open; the Phase 5 figure is an idle measurement
+after restart. Phase 6 will repeat this with profiling tools, memory-leak checks, and
+idle-vs-active comparisons per module.
 
 ---
 
-## 11. Known limitations (current release)
+## 12. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -524,10 +598,20 @@ this with profiling tools, memory-leak checks, and idle-vs-active comparisons pe
   user-defined metrics require the per-module settings page planned for a later phase.
 - **No backup/restore/export/import** — the SQLite file can be copied manually while the
   app is closed; first-class data tools arrive in Phase 6.
+- **Breathing is foreground-only** — the session runs on the UI thread and pauses when
+  the process is closed; there is no lock-screen or background continuation.
+- **Screen-break interval is wall-clock** — reminders fire on the scheduler interval
+  regardless of typing/activity; there is no idle detection, pause-for-fullscreen or
+  per-app suppression yet.
+- **Learning progress auto-updates only in minutes/hours** — pages, chapters, lessons and
+  sessions advance solely from the progress field; there are no goal reminders or due-date
+  notifications.
+- **Quick Tools stays at three tools** — additional utilities are intentionally excluded
+  from this release.
 
 ---
 
-## 12. Pending roadmap
+## 13. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -563,10 +647,10 @@ this with profiling tools, memory-leak checks, and idle-vs-active comparisons pe
 - [x] Calendar / daily planner (internal calendar; tasks, reminders, medication, focus).
 - [x] Statistics (daily/weekly/monthly, native simple charts, tables).
 
-### Phase 5 — Quick Tools and learning
-- [ ] Quick Ideas/Notes tool, Breathing tool, Screen-break reminder — exactly three.
-- [ ] Learning tracker: goals, courses, reading goals, sessions, progress.
-- [ ] Enforce the "do not implement" list (no stopwatch, calculator, clipboard manager,
+### Phase 5 — Quick Tools and learning (completed in 1.7.0)
+- [x] Quick Ideas/Notes tool, Breathing tool, Screen-break reminder — exactly three.
+- [x] Learning tracker: goals, courses, reading goals, sessions, progress.
+- [x] Enforce the "do not implement" list (no stopwatch, calculator, clipboard manager,
       file manager, journal, etc.).
 
 ### Phase 6 — Hardening
@@ -577,17 +661,17 @@ this with profiling tools, memory-leak checks, and idle-vs-active comparisons pe
 
 ---
 
-## 13. Acceptance criteria tracking
+## 14. Acceptance criteria tracking
 
-From the master specification §11 (items 23–25 track the Phase 4 scope):
+From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5):
 
 | # | Criterion | Status |
 | --- | --- | --- |
 | 1 | Existing application launching unchanged | ✔ Tested |
 | 2 | Existing custom icons still work | ✔ Tested |
 | 3 | Dock approximately 50 px wide | ✔ Tested |
-| 4 | Productivity modules open as compact popups | ✔ Tested (all ten at 320 DIP) |
-| 5 | Expanded workspace works | ✔ Tested (980×680 expanded views, widget grid, month planner, statistics) |
+| 4 | Productivity modules open as compact popups | ✔ Tested (all twelve at 320 DIP) |
+| 5 | Expanded workspace works | ✔ Tested (980×680 expanded views, widget grid, month planner, statistics, breathing circle) |
 | 6 | Compact and expanded views share data | ✔ Tested (both views over one store, rebuilt on change) |
 | 7 | Tasks persist after restart | ✔ Tested |
 | 8 | Reminders work correctly | ✔ Tested (fire, toast, snooze, complete, overdue on startup) |
@@ -595,23 +679,25 @@ From the master specification §11 (items 23–25 track the Phase 4 scope):
 | 10 | Focus sessions record accurate durations | ✔ Tested (planned vs actual seconds, pause segments) |
 | 11 | Habits retain daily/weekly history | ✔ Tested (10 seeded + custom habits, 7-day matrix, 3-day streak across restart) |
 | 12 | Medication schedules and intake logs separate | ✔ Tested (`Medications`/`MedicationSchedules`/`MedicationLogs`, pending→taken/skipped/snoozed/missed) |
-| 13 | Quick Ideas / Notes saves information | ✔ Tested (capture, pin, search, categories, archive/restore, convert) |
-| 14 | Breathing sessions function | ◻ Pending (Phase 5) |
-| 15 | Screen-break reminders function | ◻ Pending (Phase 5) |
-| 16 | Module settings persist | ✔ Tested |
+| 13 | Quick Ideas / Notes saves information | ✔ Tested (Quick capture writes to Notes category Quick, pin, search, categories, archive/restore, convert) |
+| 14 | Breathing sessions function | ✔ Tested (4 patterns, pause/resume, cycle completion, persisted sessions and stats) |
+| 15 | Screen-break reminders function | ✔ Tested (interval scheduler, toast, Remind now, persisted settings, restart) |
+| 16 | Module settings persist | ✔ Tested (module state plus `ConfigJson` screen-break settings across restart) |
 | 17 | Disabled modules preserve data | ✔ Tested |
 | 18 | Backup and restore work | ◻ Pending (Phase 6) |
 | 19 | No mandatory internet access | ✔ Tested (no network code) |
 | 20 | No unnecessary background processes | ✔ Tested (single process) |
-| 21 | CPU and memory measured | ✔ Baseline recorded (§10); full profiling Phase 6 |
+| 21 | CPU and memory measured | ✔ Baseline recorded (§11); full profiling Phase 6 |
 | 22 | Launcher functionality not broken | ✔ Tested |
 | 23 | Dashboard aggregates daily focus, tasks, habits, medication, health | ✔ Tested (snapshot + six widgets after restart) |
 | 24 | Calendar aggregates tasks, reminders, medication and focus | ✔ Tested (month grid, agenda, quick add) |
 | 25 | Statistics show daily/weekly/monthly charts and tables | ✔ Tested (three granularities, four metrics) |
+| 26 | Learning tracker supports goals, sessions and progress | ✔ Tested (goal editor, session logging, auto progress, filters, restart) |
+| 27 | Quick Tools contains exactly three tools | ✔ Tested (note capture, breathing, screen break only) |
 
 ---
 
-## 14. Test method notes
+## 15. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -620,7 +706,9 @@ From the master specification §11 (items 23–25 track the Phase 4 scope):
   (`TabModules`, `TabNotifications`, `TaskTitle`, `TaskDue`, `TaskSearch`, `ReminderTitle`,
   `ReminderDue`, `ReminderCustomDays`, `NoteTitle`, `NoteBody`, `NoteCapture`,
   `HabitName`, `HabitDescription`, `HabitTarget`, `HabitUnit`, `MedName`, `MedDosage`,
-  `MedTimes`, `MedNotes`, `WeightInput`, …); module list rows, chips and round checks
+  `MedTimes`, `MedNotes`, `WeightInput`, `QuickNoteCapture`, `BreatheStartButton`,
+  `ScreenBreakToggle`, `ScreenBreakRemindButton`, `LearningSearch`, `GoalTitle`,
+  `SessionLogButton`, …); module list rows, chips and round checks
   have descriptive automation names ("Toggle habit Drink water", "Take Vitamin D at
   12:35", "Add Water"), module toggles use `TogglePattern`, links and buttons use
   `InvokePattern`.
@@ -644,8 +732,14 @@ From the master specification §11 (items 23–25 track the Phase 4 scope):
 - Persistence verified by closing/restarting the app and re-reading `pins.json`,
   `settings.json`, the Run registry value, and the productivity tables (`Tasks`,
   `Reminders`, `Notes`, `FocusSessions`, `Habits`, `HabitLogs`, `Medications`,
-  `MedicationSchedules`, `MedicationLogs`, `HealthLogs`) directly from `rightdock.db`
+  `MedicationSchedules`, `MedicationLogs`, `HealthLogs`, `BreathingSessions`,
+  `LearningGoals`, `LearningSessions`) directly from `rightdock.db`
   with Python's `sqlite3` module.
+- Screen-break scheduling was exercised with both the persisted interval and a temporary
+  1-minute interval, capturing the toast with `tools/watch-toast.ps1`; module config was
+  inspected in `ModuleSettings.ConfigJson` before and after restart.
+- Phase 5 test data (quick note, learning goals/sessions, breathing sessions and the
+  quicktools module state row) was deleted from the live database before release.
 - Missed-dose and streak behavior were seeded through the database (a medication row
   created three days earlier, prior-day habit logs) and then re-checked in the UI after
   a restart, exercising the same `EnsureDoses`/`MarkMissed`/streak code paths the app

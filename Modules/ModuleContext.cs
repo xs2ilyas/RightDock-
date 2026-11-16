@@ -27,6 +27,10 @@ namespace RightDock.Modules
 
         internal Action<string> RefreshModule { get; set; }
 
+        internal Func<string, string> LoadModuleConfig { get; set; }
+
+        internal Action<string, string> SaveModuleConfig { get; set; }
+
         internal void LogInfo(string message)
         {
             Log.Info("[module] " + message);

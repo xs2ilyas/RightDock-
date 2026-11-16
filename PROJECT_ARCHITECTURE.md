@@ -1,7 +1,8 @@
 # RightDock — Project Architecture
 
-> Current release: **1.6.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
-> modules + Phase 3 personal tracking + Phase 4 planning and insight)
+> Current release: **1.7.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
+> modules + Phase 3 personal tracking + Phase 4 planning and insight + Phase 5 quick
+> tools and learning)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
@@ -10,7 +11,8 @@ AppBar protocol, launches pinned applications, and supports a 181-glyph outlined
 system, auto-hide with edge reveal, a five-tab settings popup, and a productivity layer:
 SQLite persistence, a module manager with compact/expanded popups, a centralized
 scheduler, in-app notification cards, and the Dashboard, Focus, Tasks, Reminders, Notes,
-Habits, Medication, Health & Lifestyle, Calendar and Statistics modules.
+Habits, Medication, Health & Lifestyle, Calendar, Statistics, Quick Tools and Learning
+modules.
 
 All functionality is implemented in one WPF process. No WebViews, Electron, separate
 module executables, background services, or third-party UI frameworks are used.
@@ -64,7 +66,9 @@ RightDock/
 │  ├─ NoteStore.cs           Notes CRUD, search, pin, categories, archive, timestamps
 │  ├─ HabitStore.cs          Habits + log window, batches, day-range queries
 │  ├─ MedicationStore.cs     Medications, schedules, intake logs, occurrences by day
-│  └─ HealthStore.cs         HealthLogs, metric definitions, day-range averages
+│  ├─ HealthStore.cs         HealthLogs, metric definitions, day-range averages
+│  ├─ BreathingStore.cs      Breathing sessions, recent history, session/seconds totals
+│  └─ LearningStore.cs       Learning goals, sessions, progress, filters and statistics
 ├─ Modules/
 │  ├─ IProductivityModule.cs Module contract + ProductivityModule base class
 │  ├─ ModuleContext.cs       Services handed to modules + OpenExpanded/RefreshModule callbacks
@@ -82,7 +86,9 @@ RightDock/
 │  ├─ Medication/            MedicationModule + dose views and schedule editor
 │  ├─ Health/                HealthModule + rings, quick log, 7-day views
 │  ├─ Calendar/              CalendarModule + month grid planner and agenda
-│  └─ Statistics/            StatisticsModule + StatsChart + daily/weekly/monthly views
+│  ├─ Statistics/            StatisticsModule + StatsChart + daily/weekly/monthly views
+│  ├─ QuickTools/            QuickToolsModule + note capture, breathing and screen breaks
+│  └─ Learning/              LearningModule + goals, sessions and progress views
 ├─ Services/
 │  ├─ Log.cs                 Append-only log under %APPDATA%\RightDock\logs
 │  ├─ Scheduler.cs           Central timestamp-based scheduler (one DispatcherTimer)
@@ -311,7 +317,12 @@ and updated timestamps. Version 2 (1.5.0) adds `MedicationLogs.SnoozeUntilUtc` a
 Habit logs are upserted on `(HabitId, LogDate)` and health logs on
 `(LogDate, MetricType)`. 1.6.0 adds no schema changes: the Notes manager reuses the
 existing `Notes.IsArchived` column for soft-hide/restore, and Dashboard, Calendar and
-Statistics read-only aggregate the existing tables.
+Statistics read-only aggregate the existing tables. Version 3 (1.7.0) adds
+`BreathingSessions` (`SessionId`, `PatternKey`, `PatternName`, `Cycles`,
+`DurationSeconds`, `StartedUtc`, `EndedUtc`, `CreatedUtc`) with an index on `StartedUtc`;
+breathing data is kept separate from Focus so it never distorts focus totals. Learning
+reuses the version 1 `LearningGoals` and `LearningSessions` tables, with sessions linked
+by `GoalId` (`ON DELETE SET NULL`) so deleting a goal keeps its history.
 
 `ModuleSettings` stores `IsEnabled`, `IsVisible`, `SortOrder`, and `ConfigJson` per
 module id; `ModuleManager` loads it at startup and saves on every change. Disabling a
@@ -341,8 +352,9 @@ settings changes; startup registration is the only registry state the app owns.
 - `DispatcherTimer`s: the 110 ms hover poll while running, a 16 ms animation timer that
   exists only during a 170 ms slide, the scheduler's single timer armed to the earliest
   due timestamp (re-armed at most once per hour so sleep/resume is handled), Focus's 1 s
-  tick only while a session is active, and a refresh timer that exists only while a
-  Dashboard (60 s compact / 30 s expanded), Calendar or Statistics view is loaded.
+  tick only while a session is active, Quick Tools' 1 s breathing tick only while a
+  breathing session runs, and a refresh timer that exists only while a Dashboard (60 s
+  compact / 30 s expanded), Calendar or Statistics view is loaded.
 - SQLite access is synchronous and serialized behind one connection lock; operations are
   short and scoped to the UI thread. Callbacks from the scheduler run on the UI thread.
 - Notifications are owned by `NotificationService`: at most four `ToastWindow` cards are
@@ -357,7 +369,8 @@ settings changes; startup registration is the only registry state the app owns.
   seven modules registered idles at **~124 MB working set, ~72 MB private, 0.02 CPU
   seconds over 30 s**; 1.6.0 with all ten modules registered and every Phase 4 view
   opened once idles at **~146 MB working set, ~94 MB private, 0.08 CPU seconds over
-  30 s** (Windows 11, 2560×1600 @125 %).
+  30 s**; 1.7.0 with twelve modules registered idles at **126.8 MB working set, 71.5 MB
+  private, 0.047 CPU seconds over 30 s** (Windows 11, 2560×1600 @125 %).
 
 These constraints are the benchmark for every new module: reuse the process, avoid
 polling, prefer timestamp math over per-item timers, load UI on demand.
@@ -387,9 +400,9 @@ dotnet build RightDock.csproj
 The master specification evolves RightDock into a productivity and life-management
 system while preserving everything above. **Phase 1 (core infrastructure) is implemented
 in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
-Medication, Health & Lifestyle) in 1.5.0, and Phase 4 (Dashboard, Notes manager,
-Calendar/planner, Statistics) in 1.6.0**; the launcher, AppBar, auto-hide, icons and
-settings keep their contracts.
+Medication, Health & Lifestyle) in 1.5.0, Phase 4 (Dashboard, Notes manager,
+Calendar/planner, Statistics) in 1.6.0, and Phase 5 (Quick Tools and Learning) in
+1.7.0**; the launcher, AppBar, auto-hide, icons and settings keep their contracts.
 
 ### 11.1 Layering
 
@@ -579,14 +592,55 @@ Key behaviors:
   every bucket with focus/tasks/habits/medication values. Granularity and metric
   selections persist for the session and the view refreshes on a 60 s timer while loaded.
 
-### 11.10 Settings evolution
+### 11.10 Phase 5 modules (implemented in 1.7.0)
+
+Phase 5 adds a multi-tool convenience module and a learning tracker. Quick Tools is
+deliberately limited to **exactly three tools**; no stopwatch, calculator, clipboard
+manager, file manager or journal was added.
+
+| Module | Dock icon | Compact | Expanded | Persistence |
+| --- | --- | --- | --- | --- |
+| Quick Tools | `lucide:sparkles` | Quick note capture (Ctrl+Enter), breathing card with pattern/cycle presets and countdown, screen-break toggle with interval chips and "Remind now" | Note capture + recent notes, animated breathing circle with four patterns and session history, screen-break interval editor (1–240 min), recent breathing sessions | `Notes` (category Quick), `BreathingSessions`, `ModuleSettings.ConfigJson` |
+| Learning | `lucide:graduation-cap` | Active goal count, this-week minutes, up to four active goals with progress bars | Goal list with search/status/category filters, goal editor (category, unit, target, progress, due date, description), log-session form, recent sessions, complete/reopen, armed delete | `LearningGoals`, `LearningSessions` |
+
+Key behaviors:
+
+- **Quick note capture** inserts a note into the Notes module with category `Quick`
+  through `NoteStore`, then calls `ModuleContext.RefreshModule("notes")` so the Notes
+  module and Dashboard reload immediately. No separate note store exists.
+- **Breathing** offers four patterns: Box (4-4-4-4), 4-7-8, Calm (4 in · 6 out) and
+  Coherent (5 in · 5 out). One 1 s timer runs only during a session; each phase advances
+  the inhale/hold/exhale/hold sequence, and the expanded view animates a circle with a
+  0.9 s scale animation per tick (0.74 ⇄ 1.0). Stop saves a partial session when at
+  least one cycle completed; completing the selected cycle count saves the full session.
+  Sessions record pattern key/name, cycles, duration and UTC start/end in
+  `BreathingSessions`, so they stay separate from Focus statistics.
+- **Screen-break reminder** persists `ScreenBreakEnabled`, `ScreenBreakMinutes` (1–240,
+  clamped), `LastBreakDate`, `BreaksToday` and the last pattern in
+  `ModuleSettings.ConfigJson`. When enabled it registers the fixed-interval scheduler key
+  `quicktools:screenbreak`; firing shows the in-app toast "Screen break" with the 20-20-20
+  guidance and opens the expanded view on click. "Remind now" fires immediately.
+  Disabling, closing the module or `Deactivate()` cancels the scheduler key.
+- **Learning goals** support categories Course/Reading/Skill/Other and units
+  minutes/hours/pages/chapters/lessons/sessions. Goals store target and progress values,
+  an optional due date (`yyyy-MM-dd`) and a completed flag. The editor validates title
+  and target; delete is armed (second click confirms) and deleting a goal keeps its
+  sessions with `GoalId` set to NULL.
+- **Learning sessions** log minutes and optional notes. For goals measured in minutes or
+  hours, the logged minutes are added automatically to the goal's progress (`hours` is
+  converted, rounded to two decimals); other units advance only via manual progress.
+  Search is a case-insensitive `LIKE` over title/description/category; status filters are
+  All/Active/Completed; category chips are derived from the goal data. Week statistics
+  start Monday and count sessions in the current week.
+
+### 11.11 Settings evolution
 
 The current settings window covers General, Appearance, **Modules** (enable/disable,
 hide/show in dock) and **Notifications** (master toggle + test). Later phases add Dock,
 Data & Backup, About, and per-module settings pages while keeping `settings.json` keys
 compatible and defaulting safely.
 
-### 11.11 Module phases
+### 11.12 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -594,10 +648,10 @@ compatible and defaulting safely.
 | 2 | Focus, Tasks, Reminders, Quick Ideas/Notes | ✔ Done ✔ Tested (1.4.0) |
 | 3 | Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested (1.5.0) |
 | 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ✔ Done ✔ Tested (1.6.0) |
-| 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ◻ Pending |
+| 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ✔ Done ✔ Tested (1.7.0) |
 | 6 | Profiling, leak checks, migration/backup tests, startup/sleep/multi-monitor tests, installer readiness | ◻ Pending |
 
-### 11.12 Invariants for future work
+### 11.13 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.

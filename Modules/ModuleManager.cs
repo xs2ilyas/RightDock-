@@ -61,6 +61,19 @@ namespace RightDock.Modules
                     }
                 }
             };
+            _context.LoadModuleConfig = moduleId =>
+            {
+                ModuleEntry entry = Find(moduleId);
+                return entry?.State.ConfigJson;
+            };
+            _context.SaveModuleConfig = (moduleId, json) =>
+            {
+                ModuleEntry entry = Find(moduleId);
+                if (entry == null) return;
+
+                entry.State.ConfigJson = string.IsNullOrWhiteSpace(json) ? "{}" : json;
+                _store.Save(entry.State);
+            };
             _popups = new PopupHost();
             _popups.OpenCountChanged += count => PopupCountChanged?.Invoke(count);
         }

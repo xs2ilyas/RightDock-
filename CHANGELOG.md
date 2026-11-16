@@ -8,11 +8,85 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Phase 5 quick tools and learning: breathing, screen-break reminder, learning tracker
-  (Quick Tools remains exactly three tools).
+- Phase 6 hardening: profiling and leak checks, migration/backup tests, startup/sleep/
+  multi-monitor/high-DPI tests, installer readiness.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.7.0] — 2026-11-16 — Phase 5 quick tools and learning
+
+### Added
+- **Quick Tools module** (`Modules/QuickTools/`, `lucide:sparkles`) — exactly three
+  tools: quick note capture, guided breathing and screen-break reminders.
+  - Quick note writes through `NoteStore` with category `Quick` and refreshes the Notes
+    module; compact capture supports Ctrl+Enter.
+  - Breathing supports Box (4-4-4-4), 4-7-8, Calm and Coherent patterns with 3/5/8
+    cycles, pause/resume/stop, phase countdown, an animated circle in the expanded view
+    and persisted sessions in the new `BreathingSessions` table (pattern, cycles,
+    duration, UTC start/end).
+  - Screen breaks persist `ScreenBreakEnabled`, `ScreenBreakMinutes` (1–240),
+    `LastBreakDate`, `BreaksToday` and `BreathPattern` in `ModuleSettings.ConfigJson`;
+    enabling registers the `quicktools:screenbreak` interval task, and firing shows the
+    "Screen break" in-app toast with 20-20-20 guidance. "Remind now" and reset are
+    available; disabling cancels the task.
+- **Learning module** (`Modules/Learning/`, `lucide:graduation-cap`) — goals with
+  Course/Reading/Skill/Other categories, units (minutes/hours/pages/chapters/lessons/
+  sessions), target and progress values, optional due date and description. Search,
+  status filters (All/Active/Completed) and category chips; complete/reopen and armed
+  delete. Session logging stores minutes/notes in `LearningSessions` and auto-adds
+  minutes (or converted hours) to minute/hour goals. Compact shows active goals and this
+  week's minutes; expanded adds the goal editor, session form and recent sessions.
+- **Schema version 3** — `BreathingSessions` table with an index on `StartedUtc`, kept
+  separate from focus data. Learning reuses the existing `LearningGoals` and
+  `LearningSessions` tables; deleting a goal keeps sessions via `ON DELETE SET NULL`.
+- `ModuleContext.LoadModuleConfig` / `SaveModuleConfig` so modules can persist their own
+  JSON config through `ModuleStateStore`.
+- `BreathingStore` and `LearningStore` data-access classes.
+- `ModuleUtil.FormatDuration` for sub-minute durations ("19 s", "1 min").
+- Automation ids for the new surfaces (`QuickNoteCapture`, `QuickNoteSaveButton`,
+  `BreatheStartButton`, `BreathePauseButton`, `BreatheStopButton`, `ScreenBreakToggle`,
+  `ScreenBreakRemindButton`, `LearningSearch`, `GoalTitle`, `GoalSaveButton`,
+  `SessionLogButton`, …).
+
+### Changed
+- Quick Tools and Learning registered after Statistics, so the dock now shows twelve
+  modules: Dashboard, Focus, Tasks, Reminders, Notes, Habits, Medication,
+  Health & Lifestyle, Calendar, Statistics, Quick Tools, Learning.
+- Version 1.7.0.
+
+### Verified
+- All twelve dock buttons appear after restart; Quick Tools and Learning open compact and
+  expanded; earlier modules and pins unchanged.
+- Quick note saved "Phase 5 quick note" and appeared in Notes under category Quick
+  (count 1 → 2); input cleared with a status message.
+- Breathing start/pause/resume/stop saved 1 cycle/19 s; a full 5-cycle Box session
+  completed at 80 s with "Complete · 5 cycles · 1 min"; session rows were present; the
+  expanded circle animated.
+- Screen break enabled at 15 min showed the next time; Remind now produced the toast,
+  incremented breaks today and persisted the config; restart restored On/15 min/1 break/
+  Box/2 notes; a 1-minute test interval fired automatically; settings were reset to
+  off/30 min.
+- Learning: created "Spanish Course" (hours, target 10, due 2026-12-31), logged 30 min →
+  "0.5 / 10 hours" plus a session; complete/reopen worked; created "Read Atomic Habits"
+  (pages, 240, progress 50); search/category filters worked; target edit kept progress;
+  armed delete removed the goal but retained its session; restart showed one active goal
+  and 30 min this week.
+- Regression: Dashboard and earlier modules unchanged; single process; no errors logged.
+- Idle after Phase 5: 126.8 MB working set, 71.5 MB private, 0.047 CPU seconds over 30 s.
+
+### Files
+- Added: `Data/BreathingStore.cs`, `Data/LearningStore.cs`,
+  `Modules/QuickTools/QuickToolsModule.cs`,
+  `Modules/QuickTools/QuickToolsCompactView.xaml(.cs)`,
+  `Modules/QuickTools/QuickToolsExpandedView.xaml(.cs)`,
+  `Modules/Learning/LearningModule.cs`,
+  `Modules/Learning/LearningCompactView.xaml(.cs)`,
+  `Modules/Learning/LearningExpandedView.xaml(.cs)`.
+- Changed: `App.xaml.cs`, `Data/Database.cs`, `Modules/ModuleContext.cs`,
+  `Modules/ModuleManager.cs`, `Modules/ModuleUtil.cs`, `RightDock.csproj`.
 
 ---
 

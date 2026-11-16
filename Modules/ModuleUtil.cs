@@ -116,6 +116,12 @@ namespace RightDock.Modules
             return (minutes / 60) + " h " + (minutes % 60).ToString("00") + " min";
         }
 
+        internal static string FormatDuration(int seconds)
+        {
+            if (seconds < 0) seconds = 0;
+            return seconds < 60 ? seconds + " s" : FormatMinutes(seconds);
+        }
+
         internal static string FormatClock(int seconds)
         {
             if (seconds < 0) seconds = 0;

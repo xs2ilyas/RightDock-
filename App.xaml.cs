@@ -6,8 +6,10 @@ using RightDock.Modules.Dashboard;
 using RightDock.Modules.Focus;
 using RightDock.Modules.Habits;
 using RightDock.Modules.Health;
+using RightDock.Modules.Learning;
 using RightDock.Modules.Medication;
 using RightDock.Modules.Notes;
+using RightDock.Modules.QuickTools;
 using RightDock.Modules.Reminders;
 using RightDock.Modules.Statistics;
 using RightDock.Modules.Tasks;
@@ -44,6 +46,8 @@ namespace RightDock
                 _services.Modules.Register(new HealthModule());
                 _services.Modules.Register(new CalendarModule());
                 _services.Modules.Register(new StatisticsModule());
+                _services.Modules.Register(new QuickToolsModule());
+                _services.Modules.Register(new LearningModule());
                 _services.Start();
             }
             catch (Exception ex)

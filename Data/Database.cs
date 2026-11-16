@@ -205,6 +205,19 @@ CREATE TABLE IF NOT EXISTS ModuleSettings (
             (2, @"
 ALTER TABLE MedicationLogs ADD COLUMN SnoozeUntilUtc TEXT;
 CREATE INDEX IF NOT EXISTS IX_MedicationLogs_Status ON MedicationLogs(Status, ScheduledUtc);
+"),
+            (3, @"
+CREATE TABLE IF NOT EXISTS BreathingSessions (
+    SessionId TEXT PRIMARY KEY NOT NULL,
+    PatternKey TEXT NOT NULL,
+    PatternName TEXT NOT NULL,
+    Cycles INTEGER NOT NULL DEFAULT 0,
+    DurationSeconds INTEGER NOT NULL DEFAULT 0,
+    StartedUtc TEXT NOT NULL,
+    EndedUtc TEXT,
+    CreatedUtc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS IX_BreathingSessions_Started ON BreathingSessions(StartedUtc);
 ")
         };
 

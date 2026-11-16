@@ -1,0 +1,118 @@
+<UserControl x:Class="RightDock.Modules.QuickTools.QuickToolsCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid Margin="0,0,0,7">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="QUICK NOTE" Margin="1,0,0,0"/>
+            <TextBlock x:Name="NoteCountText" Style="{StaticResource MdCaption}" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <TextBox x:Name="CaptureInput" Style="{StaticResource MdInput}" Height="56"
+                 AutomationProperties.AutomationId="QuickNoteCapture"
+                 AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                 VerticalScrollBarVisibility="Auto" KeyDown="Capture_KeyDown"/>
+
+        <Grid Margin="0,7,0,0">
+            <TextBlock Style="{StaticResource MdCaption}" Text="Ctrl+Enter to save to Notes." VerticalAlignment="Center"
+                       Margin="1,0,0,0"/>
+            <Button x:Name="SaveNoteButton" Style="{StaticResource MdPrimaryButton}" Content="Save note" Padding="12,6"
+                    AutomationProperties.AutomationId="QuickNoteSaveButton"
+                    HorizontalAlignment="Right" Click="Capture_Click"/>
+        </Grid>
+
+        <Grid Margin="1,14,0,0">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="BREATHE" Margin="0"/>
+            <Button Style="{StaticResource MdGhostButton}" Content="Open" FontSize="10.5"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Click="Open_Click"/>
+        </Grid>
+
+        <WrapPanel x:Name="PatternPanel" Margin="0,0,0,0"/>
+
+        <Border Style="{StaticResource MdCard}" Padding="11" Margin="0,4,0,0">
+            <StackPanel>
+                <Grid>
+                    <StackPanel>
+                        <TextBlock x:Name="PhaseText" Text="Ready" FontSize="22" FontWeight="SemiBold"
+                                   Foreground="#F5F5F5" AutomationProperties.AutomationId="BreathePhaseText"/>
+                        <TextBlock x:Name="BreathMetaText" Style="{StaticResource MdCaption}"
+                                   Text="Pick a pattern and start."
+                                   AutomationProperties.AutomationId="BreatheCountdown"/>
+                    </StackPanel>
+                    <TextBlock x:Name="CycleText" Style="{StaticResource MdCaption}"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <ProgressBar x:Name="PhaseProgress" Style="{StaticResource MdProgress}" Margin="0,9,0,0"
+                             Minimum="0" Maximum="1" Value="0"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                    <TextBlock Style="{StaticResource MdCaption}" Text="Cycles" VerticalAlignment="Center"
+                               Margin="1,0,7,0"/>
+                    <ToggleButton x:Name="Cycles3" Style="{StaticResource MdChip}" Content="3" Margin="0,0,4,0"
+                                  AutomationProperties.AutomationId="BreatheCycles3" Click="Cycles_Click"/>
+                    <ToggleButton x:Name="Cycles5" Style="{StaticResource MdChip}" Content="5" Margin="0,0,4,0"
+                                  AutomationProperties.AutomationId="BreatheCycles5" Click="Cycles_Click"/>
+                    <ToggleButton x:Name="Cycles8" Style="{StaticResource MdChip}" Content="8" Margin="0"
+                                  AutomationProperties.AutomationId="BreatheCycles8" Click="Cycles_Click"/>
+                </StackPanel>
+
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="StartButton" Style="{StaticResource MdPrimaryButton}" Content="Start"
+                            Padding="13,6"
+                            AutomationProperties.AutomationId="BreatheStartButton" Click="Start_Click"/>
+                    <Button Grid.Column="1" x:Name="PauseButton" Style="{StaticResource MdSecondaryButton}"
+                            Content="Pause" Padding="9,5" Margin="6,0,0,0"
+                            AutomationProperties.AutomationId="BreathePauseButton" Click="Pause_Click"/>
+                    <Button Grid.Column="2" x:Name="StopButton" Style="{StaticResource MdGhostButton}" Content="Stop"
+                            Margin="8,0,2,0" VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="BreatheStopButton" Click="Stop_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="1,14,0,0">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="SCREEN BREAK" Margin="0"/>
+            <TextBlock x:Name="BreaksTodayText" Style="{StaticResource MdCaption}" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <Border Style="{StaticResource MdCard}" Padding="11" Margin="0,4,0,0">
+            <StackPanel>
+                <Grid>
+                    <StackPanel>
+                        <TextBlock Text="Break reminders" FontSize="12" Foreground="#EDEDED"/>
+                        <TextBlock x:Name="NextBreakText" Style="{StaticResource MdCaption}" Text="Off"
+                                   AutomationProperties.AutomationId="ScreenBreakNextText"/>
+                    </StackPanel>
+                    <ToggleButton x:Name="ScreenBreakToggle" Style="{StaticResource MdChip}" Content="Off"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  AutomationProperties.AutomationId="ScreenBreakToggle" Click="ScreenBreak_Click"/>
+                </Grid>
+
+                <UniformGrid Columns="4" Margin="0,8,0,0">
+                    <ToggleButton x:Name="Minutes15" Style="{StaticResource MdChip}" Content="15m" Tag="15" Margin="0,0,4,0"
+                                  AutomationProperties.AutomationId="ScreenBreak15" Click="Minutes_Click"/>
+                    <ToggleButton x:Name="Minutes30" Style="{StaticResource MdChip}" Content="30m" Tag="30" Margin="0,0,4,0"
+                                  AutomationProperties.AutomationId="ScreenBreak30" Click="Minutes_Click"/>
+                    <ToggleButton x:Name="Minutes45" Style="{StaticResource MdChip}" Content="45m" Tag="45" Margin="0,0,4,0"
+                                  AutomationProperties.AutomationId="ScreenBreak45" Click="Minutes_Click"/>
+                    <ToggleButton x:Name="Minutes60" Style="{StaticResource MdChip}" Content="60m" Tag="60" Margin="0"
+                                  AutomationProperties.AutomationId="ScreenBreak60" Click="Minutes_Click"/>
+                </UniformGrid>
+
+                <Button Style="{StaticResource MdGhostButton}" Content="Remind me now"
+                        HorizontalAlignment="Left" Margin="0,3,0,0"
+                        AutomationProperties.AutomationId="ScreenBreakRemindButton" Click="RemindNow_Click"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

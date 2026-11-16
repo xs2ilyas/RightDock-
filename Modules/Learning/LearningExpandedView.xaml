@@ -1,0 +1,180 @@
+<UserControl x:Class="RightDock.Modules.Learning.LearningExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel>
+            <Grid Margin="1,0,0,6">
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="LEARNING GOALS" Margin="0"/>
+                <Button Style="{StaticResource MdGhostButton}" Content="+ New goal" FontSize="10.5"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        AutomationProperties.AutomationId="LearningNewButton" Click="New_Click"/>
+            </Grid>
+
+            <TextBox x:Name="SearchBox" Style="{StaticResource MdInput}" TextChanged="Search_TextChanged"
+                     AutomationProperties.AutomationId="LearningSearch"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <ToggleButton x:Name="StatusAll" Style="{StaticResource MdChip}" Content="All" Margin="0,0,4,0"
+                              AutomationProperties.AutomationId="LearningStatusAll" Click="Status_Click"/>
+                <ToggleButton x:Name="StatusActive" Style="{StaticResource MdChip}" Content="Active" Margin="0,0,4,0"
+                              AutomationProperties.AutomationId="LearningStatusActive" Click="Status_Click"/>
+                <ToggleButton x:Name="StatusCompleted" Style="{StaticResource MdChip}" Content="Completed"
+                              AutomationProperties.AutomationId="LearningStatusCompleted" Click="Status_Click"/>
+            </StackPanel>
+
+            <WrapPanel x:Name="FilterCategoryPanel" Margin="0,4,0,0"/>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,4,0,4"
+                       AutomationProperties.AutomationId="LearningListCount"/>
+
+            <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="GoalPanel"/>
+            </ScrollViewer>
+
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                       Text="No active goals yet."/>
+        </StackPanel>
+
+        <Border Grid.Column="1" Style="{StaticResource MdCard}" Margin="16,0,0,0" Padding="16">
+            <StackPanel>
+                <Grid Margin="0,0,0,10">
+                    <TextBlock x:Name="EditorTitle" Style="{StaticResource MdTitle}" Text="New goal"/>
+                    <TextBlock x:Name="EditorStatus" FontSize="10.5" Foreground="#9CC7E9"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" MaxWidth="300"
+                               AutomationProperties.AutomationId="LearningEditorStatus"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TITLE"/>
+                <TextBox x:Name="TitleInput" Style="{StaticResource MdInput}"
+                         AutomationProperties.AutomationId="GoalTitle"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="CATEGORY" Margin="1,10,0,6"/>
+                <WrapPanel>
+                    <ToggleButton x:Name="CategoryCourse" Style="{StaticResource MdChip}" Content="Course"
+                                  Tag="Course" Click="Category_Click"/>
+                    <ToggleButton x:Name="CategoryReading" Style="{StaticResource MdChip}" Content="Reading"
+                                  Tag="Reading" Click="Category_Click"/>
+                    <ToggleButton x:Name="CategorySkill" Style="{StaticResource MdChip}" Content="Skill"
+                                  Tag="Skill" Click="Category_Click"/>
+                    <ToggleButton x:Name="CategoryOther" Style="{StaticResource MdChip}" Content="Other"
+                                  Tag="Other" Click="Category_Click"/>
+                </WrapPanel>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TRACK BY" Margin="1,6,0,6"/>
+                <WrapPanel x:Name="EditorUnitPanel">
+                    <ToggleButton x:Name="UnitMinutes" Style="{StaticResource MdChip}" Content="minutes"
+                                  Tag="minutes" Click="Unit_Click"/>
+                    <ToggleButton x:Name="UnitHours" Style="{StaticResource MdChip}" Content="hours"
+                                  Tag="hours" Click="Unit_Click"/>
+                    <ToggleButton x:Name="UnitPages" Style="{StaticResource MdChip}" Content="pages"
+                                  Tag="pages" Click="Unit_Click"/>
+                    <ToggleButton x:Name="UnitChapters" Style="{StaticResource MdChip}" Content="chapters"
+                                  Tag="chapters" Click="Unit_Click"/>
+                    <ToggleButton x:Name="UnitLessons" Style="{StaticResource MdChip}" Content="lessons"
+                                  Tag="lessons" Click="Unit_Click"/>
+                    <ToggleButton x:Name="UnitSessions" Style="{StaticResource MdChip}" Content="sessions"
+                                  Tag="sessions" Click="Unit_Click"/>
+                </WrapPanel>
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="1.2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="TARGET"/>
+                        <TextBox x:Name="TargetInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="GoalTargetValue"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="PROGRESS"/>
+                        <TextBox x:Name="ProgressInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="GoalProgressValue"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="DUE DATE"/>
+                        <TextBox x:Name="DueInput" Style="{StaticResource MdInput}"
+                                 ToolTip="For example 2026-12-31"
+                                 AutomationProperties.AutomationId="GoalDueDate"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTES" Margin="1,10,0,6"/>
+                <TextBox x:Name="DescriptionInput" Style="{StaticResource MdInput}" Height="50"
+                         AutomationProperties.AutomationId="GoalDescription"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto"/>
+
+                <TextBlock x:Name="ErrorText" Foreground="#FF9A9A" FontSize="11" Margin="1,8,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Style="{StaticResource MdPrimaryButton}" Content="Save goal"
+                            AutomationProperties.AutomationId="GoalSaveButton" Click="Save_Click"/>
+                    <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Clear"
+                            Margin="8,0,0,0" HorizontalAlignment="Left"
+                            AutomationProperties.AutomationId="GoalClearButton" Click="Clear_Click"/>
+                    <Button x:Name="CompleteButton" Grid.Column="2" Style="{StaticResource MdSecondaryButton}"
+                            Content="Mark complete" IsEnabled="False" Margin="0,0,8,0"
+                            AutomationProperties.AutomationId="GoalCompleteButton" Click="Complete_Click"/>
+                    <Button x:Name="DeleteButton" Grid.Column="3" Style="{StaticResource MdDangerButton}"
+                            Content="Delete" IsEnabled="False"
+                            AutomationProperties.AutomationId="GoalDeleteButton" Click="Delete_Click"/>
+                </Grid>
+
+                <Border Style="{StaticResource MdDivider}"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="LOG SESSION"/>
+                <TextBlock Style="{StaticResource MdCaption}" Margin="0,0,0,7"
+                           Text="Sessions add minutes to minute or hour goals automatically."/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox x:Name="SessionMinutesInput" Style="{StaticResource MdInput}"
+                             ToolTip="Minutes studied"
+                             AutomationProperties.AutomationId="SessionMinutes"/>
+                    <TextBox Grid.Column="1" x:Name="SessionNotesInput" Style="{StaticResource MdInput}"
+                             Margin="8,0,0,0" ToolTip="What did you work on?"
+                             AutomationProperties.AutomationId="SessionNotes"/>
+                    <Button Grid.Column="2" Style="{StaticResource MdPrimaryButton}" Content="Log"
+                            Margin="8,0,0,0" AutomationProperties.AutomationId="SessionLogButton"
+                            Click="LogSession_Click"/>
+                </Grid>
+
+                <TextBlock x:Name="SessionStatus" Style="{StaticResource MdCaption}" Margin="1,6,0,2"
+                           AutomationProperties.AutomationId="SessionStatus"/>
+
+                <StackPanel x:Name="SessionPanel"/>
+                <TextBlock x:Name="EmptySessionsText" Style="{StaticResource MdCaption}"
+                           Text="Log a session to start building history."/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
