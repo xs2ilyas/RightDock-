@@ -6,6 +6,8 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using RightDock.Data;
+using RightDock.Modules;
 
 namespace RightDock
 {
@@ -28,28 +30,38 @@ namespace RightDock
             Color.FromRgb(0xA8, 0x8B, 0xEB),
         };
 
+        private readonly DockServices _services;
         private readonly AppSettings _settings;
+        private readonly ModuleManager _modules;
         private readonly List<Button> _swatchButtons = new List<Button>();
         private Button _customSwatch;
+        private Brush _iconBrush;
         private Color _currentColor;
         private bool _loading = true;
 
-        public SettingsWindow(AppSettings settings)
+        internal SettingsWindow(DockServices services)
         {
             InitializeComponent();
 
-            _settings = settings;
-            _currentColor = ParseColor(settings.IconColor, Presets[0]);
+            _services = services;
+            _settings = services.Settings;
+            _modules = services.Modules;
+            _currentColor = ParseColor(_settings.IconColor, Presets[0]);
+            _iconBrush = CreateFrozenBrush(_currentColor);
 
             BuildSwatches();
+            RebuildModulesPage();
             SelectTab(0);
 
-            AutoHideToggle.IsChecked = settings.AutoHide;
+            AutoHideToggle.IsChecked = _settings.AutoHide;
+            NotificationsToggle.IsChecked = _settings.NotificationsEnabled;
             StartupToggle.IsChecked = StartupRegistration.IsEnabled();
             StartupPathRun.Text = StartupRegistration.ExecutablePath;
 
             AutoHideToggle.Checked += AutoHideToggled;
             AutoHideToggle.Unchecked += AutoHideToggled;
+            NotificationsToggle.Checked += NotificationsToggled;
+            NotificationsToggle.Unchecked += NotificationsToggled;
             StartupToggle.Checked += StartupToggled;
             StartupToggle.Unchecked += StartupToggled;
 
@@ -115,13 +127,113 @@ namespace RightDock
             button.Foreground = checkBrush;
         }
 
+        private void RebuildModulesPage()
+        {
+            ModulesList.Children.Clear();
+
+            List<ModuleEntry> entries = _modules?.OrderedEntries() ?? new List<ModuleEntry>();
+            ModulesEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            foreach (ModuleEntry entry in entries)
+            {
+                ModulesList.Children.Add(BuildModuleRow(entry));
+            }
+        }
+
+        private UIElement BuildModuleRow(ModuleEntry entry)
+        {
+            var row = new Grid { Margin = new Thickness(2, 0, 2, 14) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var iconHost = new ContentControl
+            {
+                Width = 20,
+                Height = 20,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 10, 0),
+            };
+
+            FrameworkElement icon = IconRepository.CreateIconElement(entry.Module.IconKey, 20, _iconBrush);
+            if (icon != null) iconHost.Content = icon;
+
+            row.Children.Add(iconHost);
+
+            var text = new StackPanel { Opacity = entry.State.IsEnabled ? 1.0 : 0.55 };
+
+            text.Children.Add(new TextBlock
+            {
+                Text = entry.Module.Name,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xED, 0xED, 0xED)),
+                FontSize = 12.5,
+            });
+
+            if (!string.IsNullOrWhiteSpace(entry.Module.Description))
+            {
+                text.Children.Add(new TextBlock
+                {
+                    Text = entry.Module.Description,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x8C, 0x8C, 0x8C)),
+                    FontSize = 10.5,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 3, 12, 0),
+                });
+            }
+
+            var visibility = new Button
+            {
+                Style = (Style)FindResource("LinkButton"),
+                Content = entry.State.IsVisible ? "Hide from dock" : "Show in dock",
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+
+            visibility.Click += (_, __) =>
+            {
+                _modules.SetVisible(entry.Module.Id, !entry.State.IsVisible);
+                RebuildModulesPage();
+            };
+
+            text.Children.Add(visibility);
+
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+
+            var toggle = new ToggleButton
+            {
+                Style = (Style)FindResource("ToggleSwitch"),
+                VerticalAlignment = VerticalAlignment.Top,
+                IsChecked = entry.State.IsEnabled,
+            };
+
+            toggle.Checked += (_, __) =>
+            {
+                _modules.SetEnabled(entry.Module.Id, true);
+                RebuildModulesPage();
+            };
+
+            toggle.Unchecked += (_, __) =>
+            {
+                _modules.SetEnabled(entry.Module.Id, false);
+                RebuildModulesPage();
+            };
+
+            Grid.SetColumn(toggle, 2);
+            row.Children.Add(toggle);
+
+            return row;
+        }
+
         private void ApplyColor(Color color)
         {
             _currentColor = Color.FromRgb(color.R, color.G, color.B);
+            _iconBrush = CreateFrozenBrush(_currentColor);
             _settings.IconColor = ToHex(_currentColor);
             SettingsStore.Save(_settings);
 
             UpdateSwatches();
+            RebuildModulesPage();
             IconColorChanged?.Invoke(_currentColor);
         }
 
@@ -156,6 +268,27 @@ namespace RightDock
             AutoHideChanged?.Invoke(enabled);
         }
 
+        private void NotificationsToggled(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+
+            _settings.NotificationsEnabled = NotificationsToggle.IsChecked == true;
+            SettingsStore.Save(_settings);
+            NotificationStatus.Visibility = Visibility.Collapsed;
+        }
+
+        private void TestNotification_Click(object sender, RoutedEventArgs e)
+        {
+            bool shown = _services?.Notifications.Show(
+                "RightDock", "Notifications are working. This is a test message.") == true;
+
+            NotificationStatus.Text = shown ? "Test notification sent." : "Notifications are disabled.";
+            NotificationStatus.Foreground = new SolidColorBrush(shown
+                ? Color.FromRgb(0x63, 0xC1, 0x74)
+                : Color.FromRgb(0xFF, 0x8A, 0x8A));
+            NotificationStatus.Visibility = Visibility.Visible;
+        }
+
         private void StartupToggled(object sender, RoutedEventArgs e)
         {
             if (_loading) return;
@@ -182,18 +315,24 @@ namespace RightDock
         {
             if (sender == TabGeneral) SelectTab(0);
             else if (sender == TabAppearance) SelectTab(1);
-            else SelectTab(2);
+            else if (sender == TabModules) SelectTab(2);
+            else if (sender == TabNotifications) SelectTab(3);
+            else SelectTab(4);
         }
 
         private void SelectTab(int index)
         {
             PageGeneral.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
             PageAppearance.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
-            PageStartup.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
+            PageModules.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
+            PageNotifications.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+            PageStartup.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
 
             TabGeneral.Tag = index == 0 ? "1" : null;
             TabAppearance.Tag = index == 1 ? "1" : null;
-            TabStartup.Tag = index == 2 ? "1" : null;
+            TabModules.Tag = index == 2 ? "1" : null;
+            TabNotifications.Tag = index == 3 ? "1" : null;
+            TabStartup.Tag = index == 4 ? "1" : null;
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)
@@ -209,6 +348,13 @@ namespace RightDock
         private static bool IsLight(Color color)
         {
             return 0.299 * color.R + 0.587 * color.G + 0.114 * color.B > 150;
+        }
+
+        private static Brush CreateFrozenBrush(Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
         }
 
         private static Color ParseColor(string value, Color fallback)

@@ -8,6 +8,7 @@ namespace RightDock
     {
         public bool AutoHide { get; set; } = true;
         public string IconColor { get; set; } = "#A9A9A9";
+        public bool NotificationsEnabled { get; set; } = true;
     }
 
     internal static class SettingsStore

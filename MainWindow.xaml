@@ -20,23 +20,31 @@
             <ScrollViewer Grid.Row="0" Margin="0,8,0,0"
                           VerticalScrollBarVisibility="Hidden"
                           HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="AppsPanel"/>
+                <StackPanel>
+                    <StackPanel x:Name="ModulesPanel"/>
+                    <Border x:Name="ModulesDivider" Height="1" Background="#1FFFFFFF"
+                            Margin="9,6,9,6" Visibility="Collapsed"/>
+                    <StackPanel x:Name="AppsPanel"/>
+                </StackPanel>
             </ScrollViewer>
 
             <StackPanel Grid.Row="1" Margin="0,4,0,12">
                 <Button x:Name="AddButton" Style="{StaticResource DockButton}"
+                        AutomationProperties.Name="Add app"
                         ToolTip="Add app" ToolTipService.Placement="Left"
                         Click="AddButton_Click">
                     <TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="16"
                                Foreground="#E6FFFFFF"/>
                 </Button>
                 <Button x:Name="SettingsButton" Style="{StaticResource DockButton}"
+                        AutomationProperties.Name="Settings"
                         ToolTip="Settings" ToolTipService.Placement="Left"
                         Margin="0,2,0,0" Click="SettingsButton_Click">
                     <TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="16"
                                Foreground="#E6FFFFFF"/>
                 </Button>
                 <Button x:Name="CloseButton" Style="{StaticResource DockButton}"
+                        AutomationProperties.Name="Close dock"
                         ToolTip="Close dock" ToolTipService.Placement="Left"
                         Margin="0,2,0,0" Click="CloseButton_Click">
                     <TextBlock Text="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="14"

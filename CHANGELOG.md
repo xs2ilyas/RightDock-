@@ -13,8 +13,73 @@ semantic versioning. Development is organized in phases (see
   `https://github.com/xs2ilyas/RightDock-.git`.
 
 ### Planned
-- Phase 1 core infrastructure: module manager, popup host, SQLite data service,
-  centralized scheduler, notification service.
+- Phase 2 productivity modules: Focus, Tasks, Reminders, Quick Ideas / Notes.
+
+---
+
+## [1.3.0] — 2026-11-16 — Phase 1 core infrastructure
+
+### Added
+- `DockServices` composition root owning settings, SQLite database, scheduler,
+  notification service and module manager; disposed on exit.
+- SQLite persistence in `%APPDATA%\RightDock\rightdock.db` via
+  `Microsoft.Data.Sqlite` 5.0.17: WAL, foreign keys, busy timeout, parameterized
+  commands, versioned migrations (`PRAGMA user_version`), and 16 productivity tables
+  with indices (Tasks, Projects, Reminders, FocusSessions, Habits, Medicine, Health,
+  Notes, Learning, AppSettings, ModuleSettings).
+- `ModuleStateStore` persisting enabled/visible/sort/config per module id; disabling a
+  module retains its data.
+- Module contract (`IProductivityModule`, `ProductivityModule`) with lazy
+  `Initialize`/`Activate`/`Deactivate` lifecycle, compact/expanded/settings views.
+- `ModuleManager`: duplicate-id guard, persisted state, enable/disable, hide/show in
+  dock, ordering, popup lifecycle, and dock entry events.
+- `PopupHost` and `ModulePopupWindow`: one compact + one expanded window per module,
+  320 DIP compact popup placed beside its dock button, 980×680 centered expanded view,
+  Esc/outside-click behavior, named close button, and an anchor-cursor guard so the
+  dock button toggles the popup instead of reopening it.
+- Centralized `Scheduler`: keyed one-shot/interval tasks, one `DispatcherTimer` armed to
+  the earliest UTC timestamp, 50 ms floor / 1 h ceiling, exception isolation, and
+  `Reconcile()` for startup.
+- `NotificationService` and native in-app `ToastWindow` cards: master enable flag,
+  bottom-right stack (max 4), 6 s auto-dismiss, click actions, no activation stealing.
+- Settings window grows to 500×520 with **Modules** (enable/disable, Hide/Show in dock)
+  and **Notifications** (master toggle + test button) tabs; `NotificationsEnabled` added
+  to `settings.json`.
+- Structured `Log` with 1 MB rotation in `%APPDATA%\RightDock\logs`.
+- Version 1.3.0.
+
+### Changed
+- `App.OnStartup` now creates `DockServices` before the window and starts module
+  lifecycle.
+- Module icons render in the dock between pins and the Add/Settings/Close stack; compact
+  and expanded module popups pause auto-hide through `PopupCount`.
+- Settings text for notifications now describes the in-app card behavior.
+
+### Fixed
+- Crash when a module popup was closed by deactivation during its own closing sequence
+  (`Cannot … Close while a Window is closing`) — added a closing guard and deferred
+  close.
+- Compact popup failed to close when clicking its dock button (deactivation closed it
+  before the click was processed) — added the anchor-cursor guard.
+
+### Verified
+- Schema v1 creation and module-setting round-trips; scheduled +3 s notification fired;
+  toast card appeared bottom-right, faded after 6 s, and did not take focus.
+- Module enable/disable, Hide/Show in dock, and persistence across restart; popup
+  toggle/outside-click/Esc/expanded-size behavior; auto-hide pause with a popup open.
+- Notifications off shows "Notifications are disabled."; on shows a test card.
+- Launcher features (pins, icons, Add, Settings, Close) remain functional.
+
+### Files
+- Added: `DockServices.cs`, `Data/Database.cs`, `Data/ModuleStateStore.cs`,
+  `Modules/IProductivityModule.cs`, `Modules/ModuleContext.cs`,
+  `Modules/ModuleManager.cs`, `Modules/PopupHost.cs`,
+  `Modules/ModulePopupWindow.xaml`, `Modules/ModulePopupWindow.xaml.cs`,
+  `Services/Log.cs`, `Services/Scheduler.cs`, `Services/NotificationService.cs`,
+  `Services/ToastWindow.cs`.
+- Modified: `App.xaml.cs`, `MainWindow.xaml`, `MainWindow.xaml.cs`,
+  `SettingsWindow.xaml`, `SettingsWindow.xaml.cs`, `AppSettings.cs`,
+  `RightDock.csproj`.
 
 ---
 

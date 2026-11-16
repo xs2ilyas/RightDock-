@@ -1,0 +1,35 @@
+using RightDock.Data;
+using RightDock.Services;
+
+namespace RightDock.Modules
+{
+    internal sealed class ModuleContext
+    {
+        internal ModuleContext(AppSettings settings, Database database, Scheduler scheduler,
+            NotificationService notifications)
+        {
+            Settings = settings;
+            Database = database;
+            Scheduler = scheduler;
+            Notifications = notifications;
+        }
+
+        internal AppSettings Settings { get; }
+
+        internal Database Database { get; }
+
+        internal Scheduler Scheduler { get; }
+
+        internal NotificationService Notifications { get; }
+
+        internal void LogInfo(string message)
+        {
+            Log.Info("[module] " + message);
+        }
+
+        internal void LogError(string message, System.Exception exception = null)
+        {
+            Log.Error("[module] " + message, exception);
+        }
+    }
+}

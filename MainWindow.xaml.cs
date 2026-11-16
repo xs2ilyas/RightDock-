@@ -4,12 +4,15 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using RightDock.Data;
+using RightDock.Modules;
 
 namespace RightDock
 {
@@ -23,7 +26,9 @@ namespace RightDock
         private const int EdgeRevealPixels = 5;
         private const int RevealMargin = 4;
 
-        private readonly AppSettings _settings = SettingsStore.Load();
+        private readonly DockServices _services;
+        private readonly AppSettings _settings;
+        private readonly ModuleManager _modules;
         private readonly List<Pin> _pins = PinStore.Load();
         private readonly DispatcherTimer _hoverTimer;
         private readonly DispatcherTimer _slideTimer;
@@ -38,6 +43,7 @@ namespace RightDock
         private bool _closing;
         private bool _slideHides;
         private int _modalDepth;
+        private int _popupCount;
         private DateTime _hideDeadline = DateTime.MaxValue;
         private double _dpiScale = 1;
         private Color _iconColor;
@@ -54,13 +60,24 @@ namespace RightDock
         private int _slideHeight;
         private DateTime _slideStarted;
 
-        public MainWindow()
+        internal MainWindow(DockServices services)
         {
             InitializeComponent();
+
+            _services = services;
+            _settings = services?.Settings ?? SettingsStore.Load();
+            _modules = services?.Modules;
 
             _iconColor = ParseIconColor(_settings.IconColor);
             _iconBrush = CreateFrozenBrush(_iconColor);
             RebuildButtons();
+            RebuildModuleButtons();
+
+            if (_modules != null)
+            {
+                _modules.DockItemsChanged += RebuildModuleButtons;
+                _modules.PopupCountChanged += OnPopupCountChanged;
+            }
 
             _hoverTimer = new DispatcherTimer(DispatcherPriority.Normal)
             {
@@ -117,6 +134,14 @@ namespace RightDock
             _hoverTimer.Stop();
             _slideTimer.Stop();
             _appBar?.Unregister();
+
+            if (_modules != null)
+            {
+                _modules.DockItemsChanged -= RebuildModuleButtons;
+                _modules.PopupCountChanged -= OnPopupCountChanged;
+                _modules.ClosePopups();
+            }
+
             base.OnClosing(e);
         }
 
@@ -179,6 +204,7 @@ namespace RightDock
 
         private void OnFullscreenChanged(bool isFullscreen)
         {
+            Services.Log.Info("Fullscreen suppression: " + isFullscreen);
             _suppressedByFullscreen = isFullscreen;
 
             if (isFullscreen)
@@ -193,7 +219,7 @@ namespace RightDock
 
         private void OnHoverTick(object sender, EventArgs e)
         {
-            if (_closing || _modalDepth > 0) return;
+            if (_closing || _modalDepth > 0 || _popupCount > 0) return;
 
             if (_suppressedByFullscreen)
             {
@@ -336,6 +362,7 @@ namespace RightDock
                     Margin = new Thickness(0, 2, 0, 2),
                 };
                 ToolTipService.SetPlacement(button, PlacementMode.Left);
+                AutomationProperties.SetName(button, pin.Name);
 
                 button.Content = BuildPinVisual(pin);
 
@@ -344,6 +371,74 @@ namespace RightDock
                 button.ContextMenu = BuildAppMenu(captured);
 
                 AppsPanel.Children.Add(button);
+            }
+        }
+
+        private void RebuildModuleButtons()
+        {
+            ModulesPanel.Children.Clear();
+
+            List<ModuleEntry> entries = _modules?.GetDockEntries() ?? new List<ModuleEntry>();
+
+            foreach (ModuleEntry entry in entries)
+            {
+                var button = new Button
+                {
+                    Style = (Style)FindResource("DockButton"),
+                    ToolTip = entry.Module.Name,
+                    Margin = new Thickness(0, 2, 0, 2),
+                };
+                ToolTipService.SetPlacement(button, PlacementMode.Left);
+                AutomationProperties.SetName(button, entry.Module.Name);
+
+                FrameworkElement icon = IconRepository.CreateIconElement(entry.Module.IconKey, 26, _iconBrush);
+                button.Content = icon ?? (object)new TextBlock
+                {
+                    Text = string.IsNullOrWhiteSpace(entry.Module.Name)
+                        ? "?"
+                        : entry.Module.Name.Substring(0, 1).ToUpperInvariant(),
+                    FontSize = 16,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = FallbackTextBrush,
+                };
+
+                ModuleEntry captured = entry;
+                button.Click += (_, __) => _modules.ToggleCompact(captured, button);
+                button.ContextMenu = BuildModuleMenu(captured, button);
+
+                ModulesPanel.Children.Add(button);
+            }
+
+            ModulesDivider.Visibility = entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private ContextMenu BuildModuleMenu(ModuleEntry entry, Button anchor)
+        {
+            var openItem = new MenuItem { Header = "Open" };
+            openItem.Click += (_, __) => _modules.ToggleCompact(entry, anchor);
+
+            var hideItem = new MenuItem { Header = "Hide from dock" };
+            hideItem.Click += (_, __) => _modules.SetVisible(entry.Module.Id, false);
+
+            var menu = new ContextMenu();
+            menu.Items.Add(openItem);
+            menu.Items.Add(hideItem);
+            menu.Opened += (_, __) => _modalDepth++;
+            menu.Closed += (_, __) => _modalDepth = Math.Max(0, _modalDepth - 1);
+            return menu;
+        }
+
+        private void OnPopupCountChanged(int count)
+        {
+            _popupCount = count;
+
+            if (count > 0)
+            {
+                _hideDeadline = DateTime.MaxValue;
+            }
+            else if (_settings.AutoHide && _dockShown)
+            {
+                _hideDeadline = DateTime.UtcNow.AddMilliseconds(HideDelayMs);
             }
         }
 
@@ -478,7 +573,9 @@ namespace RightDock
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            var settings = new SettingsWindow(_settings)
+            if (_services == null) return;
+
+            var settings = new SettingsWindow(_services)
             {
                 Owner = this,
                 WindowStartupLocation = WindowStartupLocation.Manual,
@@ -509,6 +606,7 @@ namespace RightDock
                 _iconColor = color;
                 _iconBrush = CreateFrozenBrush(color);
                 RebuildButtons();
+                RebuildModuleButtons();
             };
 
             _modalDepth++;
