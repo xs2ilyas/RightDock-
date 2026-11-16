@@ -7,12 +7,13 @@ namespace RightDock.Modules
     internal sealed class ModuleContext
     {
         internal ModuleContext(AppSettings settings, Database database, Scheduler scheduler,
-            NotificationService notifications)
+            NotificationService notifications, SoundService sounds)
         {
             Settings = settings;
             Database = database;
             Scheduler = scheduler;
             Notifications = notifications;
+            Sounds = sounds;
         }
 
         internal AppSettings Settings { get; }
@@ -22,6 +23,8 @@ namespace RightDock.Modules
         internal Scheduler Scheduler { get; }
 
         internal NotificationService Notifications { get; }
+
+        internal SoundService Sounds { get; }
 
         internal Action<string> OpenExpanded { get; set; }
 

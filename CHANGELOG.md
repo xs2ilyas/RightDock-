@@ -8,11 +8,68 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Post-1.8 maintenance: drag reordering, per-monitor dock placement, per-module settings
+- Post-1.9 maintenance: drag reordering, per-monitor dock placement, per-module settings
   page, signed installer and scheduled backups.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.9.0] — 2026-11-16 — Phase 7 bell sounds
+
+### Added
+- **Bell sounds** (`Services/BellSynth.cs`, `Services/SoundService.cs`) — ten synthesized
+  timbres (Classic Bell, Soft Chime, Glass Bell, Marimba, Temple Bowl, Digital Chime, Harp
+  Pluck, Music Box, Deep Resonant, Bright Bell) rendered in memory as 44.1 kHz PCM16 mono
+  WAV, so no audio files, codecs or downloads are involved. `SoundPlayer` instances are
+  cached per bell.
+- **Distinct alert patterns** — finishing a focus session rings three times, 850 ms
+  apart; a due reminder rings once. A new alert cancels the remainder of an in-flight
+  sequence.
+- **Sound pickers** — Settings → Notifications gains a SOUNDS section with a ten-item
+  picker and Preview button for focus completion and for reminders, plus a status line.
+  Choices save immediately (`FocusSound`/`ReminderSound` in `settings.json`), are
+  validated against the catalog on load, and default to `classic`/`soft`.
+- **Notification gating** — live bells respect the notifications master toggle; previews
+  always play so the pickers stay testable while notifications are off.
+- **Tooling** — `tools/ui.ps1` adds `expand`, `collapse`, `select` and `selected` actions
+  and lists ComboBox controls, enabling automated verification of the pickers.
+
+### Changed
+- `DockServices` owns a `SoundService` and passes it through `ModuleManager`/`ModuleContext`
+  to every module; it is disposed after the modules shut down.
+- Focus completion and reminder firing call the sound service immediately before their
+  notification card.
+- Version 1.9.0.
+
+### Verified
+- All ten bells rendered offline: 0.85–2.6 s WAVs, 75–229 KB each, normalized to the same
+  peak with distinct RMS values (no duplicates).
+- Picked Glass Bell for focus and Music Box for reminders through the Settings combos;
+  `settings.json` recorded `"FocusSound": "glass"` and `"ReminderSound": "musicbox"`, and
+  the log showed `Bells: focus preview using "glass" x3.` and
+  `Bells: reminder preview using "musicbox" x1.`
+- With notifications off, Preview still played and the status line added "Notifications are
+  off, so live alerts stay silent."
+- A real reminder due at 14:39 produced one ring (`Bells: reminder using "musicbox" x1.`)
+  and its card; with notifications off, a second reminder produced no bell log entry.
+- A 15-minute focus session started through the Focus popup and rang three times at
+  completion (`Bells: focus session complete using "glass" x3.`), with the
+  "Focus session complete" card captured at the same moment.
+- No errors in `rightdock.log`; selections survived an app restart (Glass Bell / Music Box
+  were still selected after the process restarted).
+- Release build: `publish\RightDock.exe` reports FileVersion 1.9.0.0 / ProductVersion
+  1.9.0; `dist\RightDock-1.9.0-win-x64.zip` contains 37 entries including the
+  `e_sqlite3.dll` natives. Fresh published process idles at 109.0 MB working set, 62.2 MB
+  private, 0.016 CPU seconds over 10 s, 463 handles and 17 threads.
+
+### Files
+- Added: `Services/BellSynth.cs`, `Services/SoundService.cs`.
+- Changed: `AppSettings.cs`, `DockServices.cs`, `Modules/ModuleContext.cs`,
+  `Modules/ModuleManager.cs`, `Modules/Focus/FocusModule.cs`,
+  `Modules/Reminders/RemindersModule.cs`, `RightDock.csproj`, `SettingsWindow.xaml`,
+  `SettingsWindow.xaml.cs`, `tools/ui.ps1`.
 
 ---
 

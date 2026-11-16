@@ -240,6 +240,7 @@ namespace RightDock.Modules.Focus
                 ? "You finished " + length + " of focused work."
                 : "You finished " + length + " on \"" + completedTask + "\".";
 
+            _context?.Sounds?.PlayFocusComplete();
             _context?.Notifications?.Show("Focus session complete", message,
                 () => _context.OpenExpanded?.Invoke(Id));
         }

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using RightDock.Services;
 
 namespace RightDock
 {
@@ -9,6 +10,8 @@ namespace RightDock
         public bool AutoHide { get; set; } = true;
         public string IconColor { get; set; } = "#A9A9A9";
         public bool NotificationsEnabled { get; set; } = true;
+        public string FocusSound { get; set; } = BellSynth.DefaultFocus;
+        public string ReminderSound { get; set; } = BellSynth.DefaultReminder;
     }
 
     internal static class SettingsStore
@@ -25,6 +28,8 @@ namespace RightDock
                 if (settings == null) return new AppSettings();
 
                 if (string.IsNullOrWhiteSpace(settings.IconColor)) settings.IconColor = "#A9A9A9";
+                if (!BellSynth.IsKnown(settings.FocusSound)) settings.FocusSound = BellSynth.DefaultFocus;
+                if (!BellSynth.IsKnown(settings.ReminderSound)) settings.ReminderSound = BellSynth.DefaultReminder;
                 return settings;
             }
             catch

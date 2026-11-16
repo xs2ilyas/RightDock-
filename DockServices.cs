@@ -17,7 +17,8 @@ namespace RightDock
             Backup = new DataBackupService(Data);
             Scheduler = new Scheduler();
             Notifications = new NotificationService(Settings);
-            Modules = new ModuleManager(Data, Scheduler, Notifications, Settings);
+            Sounds = new SoundService(Settings);
+            Modules = new ModuleManager(Data, Scheduler, Notifications, Sounds, Settings);
         }
 
         internal AppSettings Settings { get; }
@@ -29,6 +30,8 @@ namespace RightDock
         internal Scheduler Scheduler { get; }
 
         internal NotificationService Notifications { get; }
+
+        internal SoundService Sounds { get; }
 
         internal ModuleManager Modules { get; }
 
@@ -46,6 +49,7 @@ namespace RightDock
             Modules.Dispose();
             Scheduler.Dispose();
             Notifications.Dispose();
+            Sounds.Dispose();
             Data.Dispose();
         }
     }

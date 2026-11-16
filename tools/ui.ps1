@@ -104,7 +104,7 @@ if ($Action -eq "elements") {
     $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
     foreach ($el in $all) {
         $type = $el.Current.ControlType.ProgrammaticName -replace "ControlType\.", ""
-        if ($type -in @("Button","ToggleButton","TextBox","Text","MenuItem","TabItem","CheckBox")) {
+        if ($type -in @("Button","ToggleButton","TextBox","Text","MenuItem","TabItem","CheckBox","ComboBox","ListItem","ComboBoxItem")) {
             Write-Output ("{0} | name='{1}' | id='{2}'" -f $type, $el.Current.Name, $el.Current.AutomationId)
         }
     }
@@ -154,6 +154,41 @@ if ($Action -eq "invoke") {
         $pattern.Toggle(); Write-Output "toggled"; exit 0
     }
     Write-Output "no invoke or toggle pattern"; exit 1
+}
+
+if ($Action -eq "expand" -or $Action -eq "collapse") {
+    $pattern = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pattern)) {
+        if ($Action -eq "expand") { $pattern.Expand() } else { $pattern.Collapse() }
+        Write-Output ($Action + "ed")
+        exit 0
+    }
+    Write-Output "no expand collapse pattern"
+    exit 1
+}
+
+if ($Action -eq "select") {
+    $pattern = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) {
+        $pattern.Select()
+        Write-Output "selected"
+        exit 0
+    }
+    Write-Output "no selection item pattern"
+    exit 1
+}
+
+if ($Action -eq "selected") {
+    $pattern = $null
+    if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern, [ref]$pattern)) {
+        $items = $pattern.Current.GetSelection()
+        if ($items.Length -eq 0) { Write-Output "(none)" } else {
+            foreach ($item in $items) { Write-Output ("selected: " + $item.Current.Name) }
+        }
+        exit 0
+    }
+    Write-Output "no selection pattern"
+    exit 1
 }
 
 if ($Action -eq "click") {

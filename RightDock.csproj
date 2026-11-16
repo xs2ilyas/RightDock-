@@ -10,7 +10,7 @@
     <RootNamespace>RightDock</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\RightDock.ico</ApplicationIcon>
-    <Version>1.8.0</Version>
+    <Version>1.9.0</Version>
     <Product>Right Dock</Product>
     <AssemblyTitle>Right Dock</AssemblyTitle>
     <Company>RightDock</Company>

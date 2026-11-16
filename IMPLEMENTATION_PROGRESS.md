@@ -1,12 +1,13 @@
 # RightDock — Implementation Progress
 
-> Release **1.8.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.9.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
 > Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
-> hardening (profiling, backup/restore, migration and OS-event tests, installer assets)
+> hardening (profiling, backup/restore, migration and OS-event tests, installer assets) +
+> Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring)
 > complete.
-> Next up: post-1.8 maintenance (see §13 known limitations).
+> Next up: post-1.9 maintenance (see §14 known limitations).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -27,6 +28,7 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.6.0 | Phase 4: Dashboard, Daily Overview, Notes manager, Calendar planner, Statistics | ✔ Done ✔ Tested |
 | v1.7.0 | Phase 5: Quick Tools (notes, breathing, screen breaks) + Learning tracker | ✔ Done ✔ Tested |
 | v1.8.0 | Phase 6: profiling/leak checks, migration and backup/restore tests, sleep/display handling, installer assets | ✔ Done ✔ Tested |
+| v1.9.0 | Phase 7: ten synthesized bell sounds, three-ring focus completion, one-ring reminders, sound pickers in Settings | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
 
 ---
@@ -608,7 +610,74 @@ the release infrastructure.
 
 ---
 
-## 11. Documentation and repository (completed)
+## 11. v1.9.0 — Phase 7 bell sounds (completed, tested)
+
+### Sound synthesis (`Services/BellSynth.cs`)
+
+Ten built-in voices, each described by fundamental frequency, duration, decay, attack,
+partial ratios/gains and optional beating: Classic Bell (880 Hz), Soft Chime (660),
+Glass Bell (1320), Marimba (523.25), Temple Bowl (220 with beating), Digital Chime
+(1046.5), Harp Pluck (784), Music Box (1568), Deep Resonant (440 with beating) and Bright
+Bell (1174.66). `CreateWav(key)` mixes the decaying partials, applies short attack and
+release fades, normalizes to a 0.55 peak, and writes a 44.1 kHz PCM16 mono WAV to memory.
+No WAV files, audio codecs or downloads are involved. `DefaultFocus = "classic"` and
+`DefaultReminder = "soft"`; `IsKnown(key)` validates persisted choices.
+
+### Playback (`Services/SoundService.cs`)
+
+One cached `SoundPlayer` per bell key (streams and players disposed on shutdown).
+
+- `PlayFocusComplete()` — three rings 850 ms apart using `FocusSound`.
+- `PlayReminder()` — one ring using `ReminderSound`.
+- `PreviewFocus(key)` / `PreviewReminder(key)` — same patterns for the Settings pickers,
+  bypassing the notifications master toggle so auditioning always works.
+- Starting a new sequence cancels the remaining timer; live alerts respect
+  `NotificationsEnabled` both when scheduled and on each tick, and every sequence logs
+  `Bells: <label> using "<key>" x<n>.`
+
+`DockServices` creates the service and passes it through `ModuleManager` to
+`ModuleContext.Sounds`; `FocusModule.Complete()` and `RemindersModule.Fire()` ring
+immediately before showing their card. `AppSettings.FocusSound`/`ReminderSound` are
+validated on load and saved whenever a picker changes.
+
+### Settings
+
+The Notifications page (now inside a scroll viewer) ends with a **SOUNDS** section: a
+ten-item picker, a Preview link and a description for focus completion and for reminders,
+plus a shared status line and the note that tones are generated on the device. Picking a
+sound saves it, plays a preview and updates the status.
+
+### Verified on a live Windows 11 session
+
+- **Synthesis:** a linked console harness rendered all ten bells; durations 0.85–2.6 s,
+  files 75–229 KB, identical normalized peak (18,022) and ten distinct RMS values — no
+  duplicate timbres; `IsKnown("bogus")` returned false.
+- **Pickers:** each combo listed the ten names; choosing Glass Bell and Music Box wrote
+  `"FocusSound": "glass"` / `"ReminderSound": "musicbox"` to `settings.json` and logged
+  `Bells: focus preview using "glass" x3.` / `Bells: reminder preview using "musicbox" x1.`
+- **Notifications off:** Preview still played and the status read "Playing Glass Bell ·
+  three rings. Notifications are off, so live alerts stay silent."
+- **Real reminder:** a reminder due 14:39 rang once
+  (`Bells: reminder using "musicbox" x1.`); a second reminder that became due while
+  notifications were off added no bell log entry.
+- **Focus completion:** a 15-minute session started from the Focus popup rang three times
+  at 14:51:32 (`Bells: focus session complete using "glass" x3.`) and the
+  "Focus session complete — You finished 15 minutes of focused work." card was captured
+  at the same second (420×113 at 2066,1415).
+- **Persistence:** after a restart the pickers still showed Glass Bell and Music Box and
+  overdue reminders rang with the saved tone; the test choices were returned to the
+  defaults during cleanup.
+- **Release:** published as 1.9.0 (FileVersion 1.9.0.0, ProductVersion 1.9.0);
+  `dist\RightDock-1.9.0-win-x64.zip` holds 37 entries; the published pickers showed the
+  defaults and previewed correctly. A fresh published process idles at 109.0 MB working
+  set, 62.2 MB private, 0.016 CPU seconds over 10 s, 463 handles and 17 threads; no errors
+  in the log.
+- **Cleanup:** the two test reminders and the 15-minute focus row were deleted from the
+  live database, and the test sound choices were reset to `classic`/`soft`.
+
+---
+
+## 12. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -618,40 +687,42 @@ the release infrastructure.
 
 ---
 
-## 12. Measured resource baseline
+## 13. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
 visible, all twelve modules registered, no popups open, 10 s idle sample with
-`tools/measure.ps1`):
+`tools/measure.ps1`, fresh 1.9.0 process):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 150.4 MB |
-| Private bytes | 98.9 MB |
+| Working set | 109.0 MB |
+| Private bytes | 62.2 MB |
 | Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
-| Handles / threads | 476 / 9 |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides |
+| Handles / threads | 463 / 17 |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing |
+| Audio | WAV rendered and cached on the first ring; no audio buffers while idle |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
 
-Stress test (`tools/stress-ui.ps1`, 27 cycles × 12 modules × open+close ≈ 650 popups):
-private memory rose from 56.5 MB to ≈111 MB, then stayed between 107.7 and 111.8 MB for
-the final 15 cycles while working set settled at ≈163 MB, handles stayed at 483–492, GDI
-at 38 and USER at 31. The initial growth is WPF view caching and short-lived objects
-awaiting GC; steady-state counts are flat, so no leak was found.
+Stress test (`tools/stress-ui.ps1`, 1.8.0 build, 27 cycles × 12 modules × open+close
+≈ 650 popups): private memory rose from 56.5 MB to ≈111 MB, then stayed between 107.7 and
+111.8 MB for the final 15 cycles while working set settled at ≈163 MB, handles stayed at
+483–492, GDI at 38 and USER at 31. The initial growth is WPF view caching and short-lived
+objects awaiting GC; steady-state counts are flat, so no leak was found.
 
 Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
 ≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
 ≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %; 1.6.0 Phase 4 after
 opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB / 71.5 MB /
-0.047 CPU seconds over 30 s; 1.8.0 idle 150.4 MB / 98.9 MB / 0.016 CPU seconds over
-10 s. The 1.8.0 idle sample was taken after the stress run, so WPF's retained views are
-included.
+0.047 CPU seconds over 30 s; 1.8.0 post-stress 150.4 MB / 98.9 MB / 0.016 CPU seconds
+over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s. The 1.8.0
+sample was taken after the stress run, so WPF's retained views are included; 1.9.0 was
+measured on a freshly started published process.
 
 ---
 
-## 13. Known limitations (current release)
+## 14. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -689,6 +760,10 @@ included.
 - **Notifications are in-app cards only** — they stack above the desktop but are not sent
   to the Windows Action Center, and quiet hours/snooze are not implemented yet (reminder
   snooze is module-level).
+- **Bells play on the default output device** — `SoundPlayer` uses the current system
+  volume; there is no per-alert volume or mute, no output-device selection, and Windows
+  sound-scheme sounds are not used. Ten timbres are synthesized locally; custom audio
+  files are not supported.
 - **Module settings page is reserved** — `CreateSettingsView()` exists on the contract but
   no generic host for module-specific settings exists yet; module options currently live
   in each expanded view.
@@ -723,7 +798,7 @@ included.
 
 ---
 
-## 14. Pending roadmap
+## 15. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -771,9 +846,16 @@ included.
 - [x] Startup, sleep/resume, clock-change, display-change, high-DPI tests.
 - [x] Installer/upgrade readiness (icon, metadata, portable ZIP, Inno Setup script).
 
+### Phase 7 — Bell sounds (completed in 1.9.0)
+- [x] Ten synthesized bell timbres (no bundled audio files or downloads).
+- [x] Focus completion rings three times; reminder rings once.
+- [x] Separate ten-sound pickers in Settings → Notifications, each with Preview.
+- [x] Choices persist in `settings.json`, are validated on load, and real alerts stay
+      silent while notifications are off.
+
 ---
 
-## 15. Acceptance criteria tracking
+## 16. Acceptance criteria tracking
 
 From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5):
 
@@ -806,10 +888,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 25 | Statistics show daily/weekly/monthly charts and tables | ✔ Tested (three granularities, four metrics) |
 | 26 | Learning tracker supports goals, sessions and progress | ✔ Tested (goal editor, session logging, auto progress, filters, restart) |
 | 27 | Quick Tools contains exactly three tools | ✔ Tested (note capture, breathing, screen break only) |
+| 28 | Focus and reminder bells differ, ring three times / once, and offer ten choices each | ✔ Tested (ten pickers with previews, `glass` focus ×3 and `musicbox` reminder ×1 in the log, persistence across restart) |
 
 ---
 
-## 16. Test method notes
+## 17. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -831,6 +914,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   a global search (`clickglobal`) after opening the anchor button.
 - **WPF text boxes surface as `ControlType.Edit`** in UIA, not "TextBox"; filter on
   ControlType.Edit when dumping elements, and prefer `ValuePattern` for typing.
+- **ComboBoxes expose names and `ExpandCollapsePattern`** — `ui.ps1` now has `expand`,
+  `collapse`, `select` and `selected` actions. Dropdown items live in a separate titleless
+  popup HWND and do **not** expose `SelectionItemPattern` in this WPF version, so a real
+  mouse click at the item's `BoundingRectangle` is used to choose a value; the closed
+  combo's `SelectionPattern` reports the resulting selection.
 - **`TogglePattern.Toggle()` is not a real click** — it flips `IsChecked` visually but
   does not raise WPF `Click`, so handlers (priority/repeat/filter chips, round
   checkboxes) do not run. Use real mouse clicks (`SetCursorPos` + `mouse_event`) or
@@ -862,7 +950,8 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   polls for visible topmost windows (titleless, 200–700 × 40–400 DIP) because shell
   balloon/toast notifications were suppressed by the environment; `tools/watch-toast.ps1`
   captures the card and can click it.
-- Helper scripts in `tools/`: `ui.ps1` (list/shot/elements/invoke/set/click/clickxy/keys),
+- Helper scripts in `tools/`: `ui.ps1`
+  (list/shot/elements/invoke/set/click/clickxy/keys/expand/collapse/select/selected),
   `watch-toast.ps1` (toast capture/click), `close-dock.ps1` (clean shutdown between runs),
   `measure.ps1` (CPU/RAM/handle sample), `stress-ui.ps1` (repeat open/close with leak
   metrics), `publish.ps1` (release/portable ZIP/installer) and `make-icon.ps1`.

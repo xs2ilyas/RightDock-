@@ -36,11 +36,11 @@ namespace RightDock.Modules
         private bool _disposed;
 
         internal ModuleManager(Database database, Scheduler scheduler, NotificationService notifications,
-            AppSettings settings)
+            SoundService sounds, AppSettings settings)
         {
             _store = new ModuleStateStore(database);
             _savedStates = _store.LoadAll();
-            _context = new ModuleContext(settings, database, scheduler, notifications);
+            _context = new ModuleContext(settings, database, scheduler, notifications, sounds);
             _context.OpenExpanded = moduleId =>
             {
                 ModuleEntry entry = Find(moduleId);

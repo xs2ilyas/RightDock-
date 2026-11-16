@@ -12,6 +12,7 @@ using System.Windows.Media;
 using Microsoft.Win32;
 using RightDock.Data;
 using RightDock.Modules;
+using RightDock.Services;
 
 namespace RightDock
 {
@@ -42,6 +43,7 @@ namespace RightDock
         private Brush _iconBrush;
         private Color _currentColor;
         private readonly DataBackupService _backup;
+        private readonly IReadOnlyList<SoundOption> _soundOptions = SoundService.Options;
         private string _diagnostics;
         private bool _loading = true;
 
@@ -57,6 +59,7 @@ namespace RightDock
             _iconBrush = CreateFrozenBrush(_currentColor);
 
             BuildSwatches();
+            BuildSoundPickers();
             RebuildModulesPage();
             SelectTab(0);
 
@@ -137,6 +140,111 @@ namespace RightDock
             button.Tag = selected ? "1" : null;
             button.BorderBrush = selected ? Brushes.White : Brushes.Transparent;
             button.Foreground = checkBrush;
+        }
+
+        private void BuildSoundPickers()
+        {
+            foreach (SoundOption option in _soundOptions)
+            {
+                FocusSoundCombo.Items.Add(option.Name);
+                ReminderSoundCombo.Items.Add(option.Name);
+            }
+
+            FocusSoundCombo.SelectedIndex = SoundIndex(_settings.FocusSound, BellSynth.DefaultFocus);
+            ReminderSoundCombo.SelectedIndex = SoundIndex(_settings.ReminderSound, BellSynth.DefaultReminder);
+
+            FocusSoundCombo.SelectionChanged += FocusSoundChanged;
+            ReminderSoundCombo.SelectionChanged += ReminderSoundChanged;
+        }
+
+        private int SoundIndex(string key, string fallback)
+        {
+            int fallbackIndex = 0;
+            for (int i = 0; i < _soundOptions.Count; i++)
+            {
+                if (string.Equals(_soundOptions[i].Key, fallback, StringComparison.OrdinalIgnoreCase))
+                {
+                    fallbackIndex = i;
+                }
+
+                if (string.Equals(_soundOptions[i].Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return fallbackIndex;
+        }
+
+        private SoundOption SoundAt(int index)
+        {
+            return index >= 0 && index < _soundOptions.Count ? _soundOptions[index] : default;
+        }
+
+        private string SelectedSoundKey(ComboBox combo, string fallback)
+        {
+            SoundOption option = SoundAt(combo.SelectedIndex);
+            return string.IsNullOrEmpty(option.Key) ? fallback : option.Key;
+        }
+
+        private string SoundName(string key)
+        {
+            foreach (SoundOption option in _soundOptions)
+            {
+                if (string.Equals(option.Key, key, StringComparison.OrdinalIgnoreCase)) return option.Name;
+            }
+
+            return key;
+        }
+
+        private void FocusSoundChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loading) return;
+
+            SoundOption option = SoundAt(FocusSoundCombo.SelectedIndex);
+            if (string.IsNullOrEmpty(option.Key) || option.Key == _settings.FocusSound) return;
+
+            _settings.FocusSound = option.Key;
+            SettingsStore.Save(_settings);
+            _services?.Sounds?.PreviewFocus(option.Key);
+            ReportPlayback("Focus sound set to " + option.Name + " · three rings.");
+        }
+
+        private void ReminderSoundChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loading) return;
+
+            SoundOption option = SoundAt(ReminderSoundCombo.SelectedIndex);
+            if (string.IsNullOrEmpty(option.Key) || option.Key == _settings.ReminderSound) return;
+
+            _settings.ReminderSound = option.Key;
+            SettingsStore.Save(_settings);
+            _services?.Sounds?.PreviewReminder(option.Key);
+            ReportPlayback("Reminder sound set to " + option.Name + " · one ring.");
+        }
+
+        private void PreviewFocusSound_Click(object sender, RoutedEventArgs e)
+        {
+            string key = SelectedSoundKey(FocusSoundCombo, BellSynth.DefaultFocus);
+            _services?.Sounds?.PreviewFocus(key);
+            ReportPlayback("Playing " + SoundName(key) + " · three rings.");
+        }
+
+        private void PreviewReminderSound_Click(object sender, RoutedEventArgs e)
+        {
+            string key = SelectedSoundKey(ReminderSoundCombo, BellSynth.DefaultReminder);
+            _services?.Sounds?.PreviewReminder(key);
+            ReportPlayback("Playing " + SoundName(key) + " · one ring.");
+        }
+
+        private void ReportPlayback(string message)
+        {
+            if (_settings != null && !_settings.NotificationsEnabled)
+            {
+                message += " Notifications are off, so live alerts stay silent.";
+            }
+
+            SetStatus(SoundStatus, message, true);
         }
 
         private void RebuildModulesPage()
@@ -287,6 +395,7 @@ namespace RightDock
             _settings.NotificationsEnabled = NotificationsToggle.IsChecked == true;
             SettingsStore.Save(_settings);
             NotificationStatus.Visibility = Visibility.Collapsed;
+            SoundStatus.Visibility = Visibility.Collapsed;
         }
 
         private void TestNotification_Click(object sender, RoutedEventArgs e)

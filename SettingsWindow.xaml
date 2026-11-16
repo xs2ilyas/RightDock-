@@ -125,6 +125,98 @@
             </Setter>
         </Style>
 
+        <Style x:Key="SoundCombo" TargetType="ComboBox">
+            <Setter Property="Width" Value="168"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Foreground" Value="#EDEDED"/>
+            <Setter Property="Background" Value="#2E2E2E"/>
+            <Setter Property="BorderBrush" Value="#3FFFFFFF"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                      RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bg" CornerRadius="6"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Margin="9,0,0,0" VerticalAlignment="Center"
+                                                    Content="{Binding SelectionBoxItem,
+                                                              RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                    ContentTemplate="{Binding SelectionBoxItemTemplate,
+                                                                     RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                                <TextBlock Grid.Column="1" Text="&#xE70D;"
+                                                           FontFamily="Segoe Fluent Icons" FontSize="9"
+                                                           Foreground="#B4B4B4" Margin="8,1,9,0"
+                                                           VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bg" Property="Background" Value="#383838"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup" Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
+                                <Border Background="#2B2B2B" BorderBrush="#3FFFFFFF" BorderThickness="1"
+                                        CornerRadius="7" Margin="0,4,0,0"
+                                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="250">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Foreground" Value="#E0E0E0"/>
+                        <Setter Property="FontSize" Value="11.5"/>
+                        <Setter Property="Padding" Value="9,6"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="Bg" Background="Transparent" CornerRadius="4" Margin="2">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsHighlighted" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="#33FFFFFF"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="#4DFFFFFF"/>
+                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="Swatch" TargetType="Button">
             <Setter Property="Width" Value="40"/>
             <Setter Property="Height" Value="40"/>
@@ -315,30 +407,88 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <StackPanel x:Name="PageNotifications" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource SectionTitle}" Text="NOTIFICATIONS"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="Show notifications"/>
-                            <TextBlock Style="{StaticResource RowDescription}"
-                                       Text="Reminders, timers and module alerts appear as RightDock cards."/>
-                        </StackPanel>
-                        <ToggleButton x:Name="NotificationsToggle" Grid.Column="1"
-                                      Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
-                    </Grid>
-                    <Border Style="{StaticResource Divider}"/>
-                    <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left"
-                            Content="Send test notification" Click="TestNotification_Click"/>
-                    <TextBlock x:Name="NotificationStatus" Margin="2,8,0,0" FontSize="11"
-                               TextWrapping="Wrap" Visibility="Collapsed"/>
-                    <TextBlock Foreground="#7F7F7F" FontSize="10.5" TextWrapping="Wrap"
-                               LineHeight="16" Margin="0,14,0,0"
-                               Text="Notifications appear as RightDock cards in the bottom-right corner and fade out after a few seconds. Clicking a card runs its action, such as opening the related module."/>
-                </StackPanel>
+                <ScrollViewer x:Name="PageNotifications" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,0,6,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="NOTIFICATIONS"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="Show notifications"/>
+                                <TextBlock Style="{StaticResource RowDescription}"
+                                           Text="Reminders, timers and module alerts appear as RightDock cards."/>
+                            </StackPanel>
+                            <ToggleButton x:Name="NotificationsToggle" Grid.Column="1"
+                                          Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Border Style="{StaticResource Divider}"/>
+                        <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left"
+                                Content="Send test notification" Click="TestNotification_Click"/>
+                        <TextBlock x:Name="NotificationStatus" Margin="2,8,0,0" FontSize="11"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <TextBlock Foreground="#7F7F7F" FontSize="10.5" TextWrapping="Wrap"
+                                   LineHeight="16" Margin="0,14,0,0"
+                                   Text="Notifications appear as RightDock cards in the bottom-right corner and fade out after a few seconds. Clicking a card runs its action, such as opening the related module."/>
+
+                        <Border Style="{StaticResource Divider}"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="SOUNDS"/>
+                        <TextBlock Style="{StaticResource RowDescription}" Margin="2,0,0,10"
+                                   Text="Focus completion rings three times; reminders ring once. Both are silent while notifications are off."/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="Focus completion"/>
+                                <TextBlock Style="{StaticResource RowDescription}"
+                                           Text="Three rings when a focus session finishes."/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <ComboBox x:Name="FocusSoundCombo" Style="{StaticResource SoundCombo}"
+                                          AutomationProperties.Name="Focus completion sound"
+                                          AutomationProperties.AutomationId="FocusSoundCombo"/>
+                                <Button x:Name="FocusSoundPreviewButton" Style="{StaticResource LinkButton}"
+                                        Content="Preview" Margin="12,0,2,0" VerticalAlignment="Center"
+                                        Click="PreviewFocusSound_Click"
+                                        AutomationProperties.AutomationId="FocusSoundPreviewButton"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,16,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="Reminders"/>
+                                <TextBlock Style="{StaticResource RowDescription}"
+                                           Text="One ring when a reminder becomes due."/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <ComboBox x:Name="ReminderSoundCombo" Style="{StaticResource SoundCombo}"
+                                          AutomationProperties.Name="Reminder sound"
+                                          AutomationProperties.AutomationId="ReminderSoundCombo"/>
+                                <Button x:Name="ReminderSoundPreviewButton" Style="{StaticResource LinkButton}"
+                                        Content="Preview" Margin="12,0,2,0" VerticalAlignment="Center"
+                                        Click="PreviewReminderSound_Click"
+                                        AutomationProperties.AutomationId="ReminderSoundPreviewButton"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock x:Name="SoundStatus" Margin="2,12,0,0" FontSize="11"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <TextBlock Foreground="#7F7F7F" FontSize="10.5" TextWrapping="Wrap"
+                                   LineHeight="16" Margin="0,10,0,0"
+                                   Text="Ten bell tones are generated on this device; no audio files or downloads are needed."/>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <ScrollViewer x:Name="PageData" Visibility="Collapsed"
                               VerticalScrollBarVisibility="Auto"

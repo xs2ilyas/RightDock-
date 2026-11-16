@@ -94,6 +94,8 @@ RightDock/
 │  ├─ Log.cs                 Append-only log under %APPDATA%\RightDock\logs
 │  ├─ Scheduler.cs           Central timestamp-based scheduler (one DispatcherTimer)
 │  ├─ NotificationService.cs In-app notification coordinator (enabled flag, stacking)
+│  ├─ SoundService.cs        Bell playback, triple/single ring sequencing, preview cache
+│  ├─ BellSynth.cs           Ten synthesized bell timbres rendered to in-memory PCM WAV
 │  └─ ToastWindow.cs         Borderless layered notification card
 ├─ app.manifest              asInvoker, Win10/11 supportedOS, PerMonitorV2
 ├─ RightDock.csproj          Build configuration
@@ -101,7 +103,7 @@ RightDock/
 │  ├─ gen-icons.js           Generates IconCatalog.cs from Lucide data
 │  ├─ lucide-icon-nodes.json Lucide source data (icon name → SVG nodes)
 │  ├─ make-icon.ps1          Draws and writes the multi-size app icon (Resources\RightDock.ico)
-│  ├─ ui.ps1                 UIA test helper: list/inspect/invoke/click/type/screenshot
+│  ├─ ui.ps1                 UIA test helper: list/inspect/invoke/click/expand/select/shot
 │  ├─ watch-toast.ps1        Polls for notification cards and can click them
 │  ├─ close-dock.ps1         Graceful WM_CLOSE of the running dock
 │  ├─ measure.ps1            Process CPU/RAM/handle profiling sample
@@ -132,7 +134,7 @@ RightDock.exe [--restart]
         │    ├─ settings.json → AppSettings
         │    ├─ Database.Initialize() (WAL, foreign keys, migrations)
         │    ├─ DataBackupService
-        │    ├─ Scheduler, NotificationService, ModuleManager
+        │    ├─ Scheduler, NotificationService, SoundService, ModuleManager
         │    └─ Modules.Start() → Initialize/Activate each enabled module
         └─ new MainWindow(services).Show()
              ├─ constructor: build pin buttons + module buttons, create timers
@@ -288,7 +290,8 @@ Shared visual language across the dock and both popups:
 Dock buttons are 38×38 with 26 px icons. The bottom stack is fixed:
 **Add (E710) → Settings (E713) → Close (E711)**, each with a left-placed tooltip.
 
-Settings (`SettingsWindow`, 500×520) uses a segmented tab strip with five pages:
+Settings (`SettingsWindow`, 560×560, six tabs) uses a segmented tab strip with
+six pages:
 
 1. **General** — auto-hide toggle + explanation of the 50 px reservation / edge reveal.
 2. **Appearance** — 10 preset swatches + rainbow "custom" swatch, current hex label,
@@ -296,9 +299,13 @@ Settings (`SettingsWindow`, 500×520) uses a segmented tab strip with five pages
 3. **Modules** — one row per registered module with icon, name, description, an
    enable/disable toggle, and a **Hide from dock / Show in dock** link; the empty state
    reads "No modules are registered yet."
-4. **Notifications** — master notifications toggle and a **Send test notification**
-   button; the inline status reports success or "Notifications are disabled."
-5. **Startup** — run-at-Windows-startup toggle, resolved exe path, inline error text if
+4. **Notifications** — master notifications toggle, a **Send test notification** button,
+   and a **SOUNDS** section with two bell pickers (Focus completion, Reminders), each with
+   a **Preview** button and a shared status line; the inline status reports success or
+   "Notifications are disabled."
+5. **Data** — database path and live summary, integrity check, backup creation, staged
+   restore with restart, copy diagnostics and the About row.
+6. **Startup** — run-at-Windows-startup toggle, resolved exe path, inline error text if
    the registry write fails (toggle reverts on failure).
 
 Settings are applied live through events (`AutoHideChanged`, `IconColorChanged`) or
@@ -311,7 +318,8 @@ immediate `ModuleManager` calls, and persisted immediately; there is no Save/App
 ```
 %APPDATA%\RightDock\
 ├─ pins.json       [ { "Name": …, "Path": …, "Icon": "lucide:…" } ]
-├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "NotificationsEnabled": true }
+├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "NotificationsEnabled": true,
+│                    "FocusSound": "classic", "ReminderSound": "soft" }
 ├─ rightdock.db    SQLite database (WAL): module state + all productivity data
 ├─ backups\        ZIP backups chosen by the user, plus pre-restore-<timestamp>\ safety copies
 ├─ restore-staging\  extracted backup awaiting apply at next start
@@ -426,9 +434,13 @@ open the database while the old process is still shutting down; a duplicate star
   seconds over 30 s**; 1.6.0 with all ten modules registered and every Phase 4 view
   opened once idles at **~146 MB working set, ~94 MB private, 0.08 CPU seconds over
   30 s**; 1.7.0 with twelve modules registered idles at **126.8 MB working set, 71.5 MB
-  private, 0.047 CPU seconds over 30 s** (Windows 11, 2560×1600 @125 %); 1.8.0 idles at
+  private, 0.047 CPU seconds over 30 s** (Windows 11, 2560×1600 @125 %); 1.8.0 measured
   **150.4 MB working set, 98.9 MB private, 0.016 CPU seconds over 10 s, 476 handles,
-  9 threads**. A 27-cycle UI stress run (~650 popup open/close operations across all
+  9 threads** after a stress run; 1.9.0 (bell sounds registered, no sound playing)
+  idles at **109.0 MB working set, 62.2 MB private, 0.016 CPU seconds over 10 s,
+  463 handles, 17 threads** on a fresh published process. Bell streams are created on
+  the first ring and cached per selected tone, so an idle session holds no audio buffers.
+  A 27-cycle UI stress run (~650 popup open/close operations across all
   twelve modules) plateaued at **≈111 MB private / ≈163 MB working set with flat handles
   (483–492), GDI (38) and USER (31) counts**, confirming popups are reclaimed after GC.
 
@@ -477,7 +489,8 @@ system while preserving everything above. **Phase 1 (core infrastructure) is imp
 in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
 Medication, Health & Lifestyle) in 1.5.0, Phase 4 (Dashboard, Notes manager,
 Calendar/planner, Statistics) in 1.6.0, Phase 5 (Quick Tools and Learning) in
-1.7.0, and Phase 6 (hardening, data tools and release assets) in 1.8.0**; the
+1.7.0, Phase 6 (hardening, data tools and release assets) in 1.8.0, and Phase 7
+(bell sounds for focus and reminders) in 1.9.0**; the
 launcher, AppBar, auto-hide, icons and settings keep their contracts.
 
 ### 11.1 Layering
@@ -485,7 +498,7 @@ launcher, AppBar, auto-hide, icons and settings keep their contracts.
 ```
 Presentation      MainWindow (dock), PopupHost, ModulePopupWindow, SettingsWindow,
                   module views (XAML, added per module)
-Application       ModuleManager, Scheduler, NotificationService
+Application       ModuleManager, Scheduler, NotificationService, SoundService
 Domain            Focus, Tasks, Reminders, Habits, Medication, Health, Notes,
                   Learning, Statistics (pure C# models + rules, Phase 2+)
 Infrastructure    Database, ModuleStateStore, AppBarDock, PinStore, SettingsStore,
@@ -546,7 +559,7 @@ supports one-shot and fixed-interval items, serializes access, and isolates call
 exceptions via logging + `CallbackFailed`. Modules re-register pending work during
 `Activate()`, which provides restart reconciliation.
 
-### 11.6 Notifications (implemented)
+### 11.6 Notifications and sounds (implemented)
 
 `NotificationService.Show(title, message, onClick?)` respects the master
 `NotificationsEnabled` setting and posts a native in-app `ToastWindow` card in the
@@ -554,6 +567,18 @@ bottom-right corner (topmost, no-activate tool window, up to four stacked cards,
 auto-dismiss, click runs the action and fades the card). In-app cards replace shell
 tray/balloon notifications, which are frequently suppressed by Focus Assist/DND and
 cannot be verified reliably. Settings → Notifications offers a live test button.
+
+`SoundService` rings an audible bell next to the card. `BellSynth` synthesizes ten bell
+timbres (Classic Bell, Soft Chime, Glass Bell, Marimba, Temple Bowl, Digital Chime, Harp
+Pluck, Music Box, Deep Resonant, Bright Bell) as decaying sine-partial mixes and renders
+each to a 44.1 kHz PCM16 mono WAV in memory — no audio assets, codecs or downloads.
+`SoundService` caches one `SoundPlayer` per bell key, reminds with one ring
+(`PlayReminder`), celebrates a finished focus session with three rings 850 ms apart
+(`PlayFocusComplete`), and cancels an in-flight sequence when a new one starts or the
+service is disposed. `PreviewFocus`/`PreviewReminder` bypass the notifications toggle so
+the Settings pickers stay testable; live alert rings respect it. Selected keys persist in
+`settings.json` (`FocusSound`, `ReminderSound`) and are validated on load with defaults
+`classic` (focus) and `soft` (reminder).
 
 ### 11.7 Phase 2 modules (implemented in 1.4.0)
 
@@ -732,14 +757,35 @@ maintenance in Settings.
 - **Release assets** — deterministic `RightDock.ico`, portable ZIP, Inno Setup script,
   third-party notices and version/company metadata in the executable.
 
-### 11.12 Settings evolution
+### 11.12 Bell sounds (implemented in 1.9.0)
+
+Phase 7 adds audible alerts without shipping audio files.
+
+- **`Services/BellSynth.cs`** — ten built-in voices defined by fundamental, duration,
+  decay, attack, partial ratios/gains and optional beating: Classic Bell, Soft Chime,
+  Glass Bell, Marimba, Temple Bowl, Digital Chime, Harp Pluck, Music Box, Deep Resonant and
+  Bright Bell. `CreateWav(key)` renders a decaying partial mix, applies attack/release
+  fades, normalizes to 0.55 peak, and writes a 44.1 kHz PCM16 mono WAV into memory.
+- **`Services/SoundService.cs`** — owns cached `SoundPlayer` instances (one per bell),
+  plays event alerts and previews, sequences three rings 850 ms apart for a finished focus
+  session, rings once for a due reminder, cancels an in-flight sequence when a new one
+  starts, and disposes streams/players on shutdown. Focus completion and reminders call
+  `PlayFocusComplete()`/`PlayReminder()`; both respect the notifications master toggle.
+  `PreviewFocus(key)`/`PreviewReminder(key)` bypass it so the Settings pickers can always
+  be auditioned.
+- **Settings** — the Notifications tab gains a SOUNDS section with a ten-item picker and
+  Preview button for each alert, plus a status line. Choices persist immediately in
+  `settings.json` as `FocusSound`/`ReminderSound`, are validated against the catalog on
+  load, and default to `classic`/`soft`.
+
+### 11.13 Settings evolution
 
 The settings window covers General, Appearance, **Modules** (enable/disable, hide/show in
-dock), **Notifications** (master toggle + test), **Data** (diagnostics, backup, restore,
-copy diagnostics) and **Startup**. `settings.json` keys stay compatible and default
-safely; the window is 560×560 with six tabs.
+dock), **Notifications** (master toggle, test card, bell pickers and previews), **Data**
+(diagnostics, backup, restore, copy diagnostics) and **Startup**. `settings.json` keys
+stay compatible and default safely; the window is 560×560 with six tabs.
 
-### 11.13 Module phases
+### 11.14 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -749,8 +795,9 @@ safely; the window is 560×560 with six tabs.
 | 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ✔ Done ✔ Tested (1.6.0) |
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ✔ Done ✔ Tested (1.7.0) |
 | 6 | Profiling, leak checks, migration/backup/restore, startup/sleep/display tests, installer readiness | ✔ Done ✔ Tested (1.8.0) |
+| 7 | Ten synthesized bell sounds, triple focus ring, single reminder ring, sound pickers | ✔ Done ✔ Tested (1.9.0) |
 
-### 11.14 Invariants for future work
+### 11.15 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.
@@ -771,8 +818,8 @@ publish\RightDock.exe
 ```
 
 `tools\publish.ps1` writes `publish\` and the portable ZIP
-`dist\RightDock-1.8.0-win-x64.zip`; add `-Installer` to compile
-`dist\RightDock-1.8.0-setup.exe` with Inno Setup 6 (install it from
+`dist\RightDock-1.9.0-win-x64.zip`; add `-Installer` to compile
+`dist\RightDock-1.9.0-setup.exe` with Inno Setup 6 (install it from
 https://jrsoftware.org/isinfo.php first). Stop the running instance before republishing
 (the exe/dll are locked while running). `publish/` must include the SQLite native
 runtimes (`runtimes/win-x64/native/e_sqlite3.dll`); `dotnet publish` copies them

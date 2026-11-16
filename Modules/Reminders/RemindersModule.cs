@@ -192,6 +192,7 @@ namespace RightDock.Modules.Reminders
                 ? "Due " + ModuleUtil.FormatDue(item.EffectiveDueUtc)
                 : item.Notes.Trim();
 
+            _context?.Sounds?.PlayReminder();
             _context?.Notifications?.Show("Reminder · " + item.Title, message,
                 () => _context.OpenExpanded?.Invoke(Id));
 
