@@ -14,6 +14,7 @@ namespace RightDock
             Settings = SettingsStore.Load();
             Data = new Database(Database.DefaultPath);
             Data.Initialize();
+            Backup = new DataBackupService(Data);
             Scheduler = new Scheduler();
             Notifications = new NotificationService(Settings);
             Modules = new ModuleManager(Data, Scheduler, Notifications, Settings);
@@ -22,6 +23,8 @@ namespace RightDock
         internal AppSettings Settings { get; }
 
         internal Database Data { get; }
+
+        internal DataBackupService Backup { get; }
 
         internal Scheduler Scheduler { get; }
 

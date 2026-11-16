@@ -11,6 +11,10 @@ namespace RightDock
 
         public const int WM_DPICHANGED = 0x02E0;
         public const int WM_DISPLAYCHANGE = 0x007E;
+        public const int WM_POWERBROADCAST = 0x0218;
+        public const int WM_TIMECHANGE = 0x001E;
+        public const int PBT_APMRESUMESUSPEND = 0x0007;
+        public const int PBT_APMRESUMEAUTOMATIC = 0x0012;
 
         public const int ABM_NEW = 0x00000000;
         public const int ABM_REMOVE = 0x00000001;

@@ -8,11 +8,84 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Phase 6 hardening: profiling and leak checks, migration/backup tests, startup/sleep/
-  multi-monitor/high-DPI tests, installer readiness.
+- Post-1.8 maintenance: drag reordering, per-monitor dock placement, per-module settings
+  page, signed installer and scheduled backups.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.8.0] — 2026-11-16 — Phase 6 hardening
+
+### Added
+- **Data & Backup settings tab** (`SettingsWindow`, sixth tab) — database path, live
+  `SQLite · schema v3 · <size> · <rows>` summary, **Open data folder**, **Run integrity
+  check**, **Create backup…**, **Restore backup…**, **Copy diagnostics** and an About row
+  (`RightDock 1.8.0 · .NET 5 · schema v3`). Status lines report success in green and
+  failures in red.
+- **Backup service** (`Data/DataBackupService.cs`) — one ZIP with a consistent
+  `SqliteConnection.BackupDatabase` copy of `rightdock.db`, `settings.json`, `pins.json`,
+  optional `icons/` and `backup.json` (version, UTC time, schema version, per-table row
+  counts). Creation validates integrity and schema before compressing.
+- **Staged restore** — the archive is inspected and extracted with a path-traversal
+  guard after user confirmation; `restore.pending` is written and the app restarts with
+  `--restart`. At the next start the staged database is validated and applied before
+  SQLite opens; the current database, settings and pins are first copied to
+  `backups\pre-restore-yyyyMMdd-HHmmss\`, so a failure rolls back. A "Backup restored"
+  toast reports the archive summary.
+- **Database diagnostics** — `Database.SchemaVersion`, `SizeBytes`,
+  `IntegrityCheck()`, whitelisted `CountRows(table)` and `BackupTo(path)`; backup copies
+  are switched from WAL to DELETE journal mode so archives contain no stale
+  `-wal`/`-shm` files.
+- **OS-event hardening** — `WM_POWERBROADCAST` resume and `WM_TIMECHANGE` re-run
+  `Scheduler.Reconcile()`; resume and `WM_DISPLAYCHANGE` re-read the monitor and
+  re-reserve the AppBar.
+- **Release assets** — embedded multi-size `Resources/RightDock.ico` (16–256 px PNG
+  entries), FileVersion/ProductVersion 1.8.0, CompanyName and product description,
+  `installer/RightDock.iss` (Inno Setup 6, per-user x64, AppMutex), `tools/publish.ps1`
+  (portable ZIP and optional installer), `tools/measure.ps1`, `tools/stress-ui.ps1`,
+  `tools/make-icon.ps1` and `THIRD-PARTY-NOTICES.md`.
+- **Restart-aware single instance** — `--restart` waits up to 10 s for the previous
+  process to release `Local\RightDock.SingleInstance`, so restore never opens the
+  database twice. A normal second launch still exits immediately.
+
+### Changed
+- Settings window is 560×560 with six tabs (Data inserted before Startup).
+- `DockServices` owns a `DataBackupService`; `App.OnStartup` applies any pending restore
+  before creating services and shows the result toast.
+- `.gitignore` excludes the generated `dist/` folder.
+
+### Verified
+- Data page showed the real database path, `SQLite · schema v3 · 260.1 KB · 44 rows` and
+  `Integrity check passed · schema v3 · 260.1 KB · 44 rows`.
+- Backup ZIP contained `backup.json`, `pins.json`, `settings.json`, `rightdock.db` and no
+  WAL/SHM files; the embedded database returned `journal_mode=delete`, `user_version=3`,
+  `integrity_check=ok` and 44 rows.
+- Restore of that archive after adding a probe note (1 → 2 notes) restarted the process
+  (PID 12380 → 24800), returned the notes to 1, kept a valid two-note safety copy in
+  `backups\pre-restore-20261116-141505\` and logged the restored summary.
+- A v1 database fixture migrated to v3 on startup (`Applied database migration v2`/`v3`)
+  with `BreathingSessions`, `SnoozeUntilUtc` and all rows intact.
+- Posted resume, clock-change and display-change messages produced the matching log lines
+  ("System resumed…", "System clock changed…") and left the reserved rect at
+  `2498,0 62×1540`.
+- Idle profiling: 150.4 MB working set, 98.9 MB private, 0.016 CPU seconds over 10 s,
+  476 handles, 9 threads. A 27-cycle UI stress run (~650 popup toggles) plateaued at
+  ≈111 MB private / ≈163 MB working set with flat handles (483–492), GDI (38) and USER
+  (31) — no leak.
+- All twelve modules still open after migration, restore and stress; no errors in the log;
+  `publish\RightDock.exe` carries version 1.8.0, the icon and the RightDock company name;
+  `dist\RightDock-1.8.0-win-x64.zip` contains 37 files. Inno Setup 6 was not installed on
+  the test machine, so the setup executable was not compiled.
+
+### Files
+- Added: `Data/DataBackupService.cs`, `Resources/RightDock.ico`,
+  `installer/RightDock.iss`, `THIRD-PARTY-NOTICES.md`, `tools/make-icon.ps1`,
+  `tools/measure.ps1`, `tools/publish.ps1`, `tools/stress-ui.ps1`.
+- Changed: `.gitignore`, `App.xaml.cs`, `Data/Database.cs`, `DockServices.cs`,
+  `MainWindow.xaml.cs`, `NativeMethods.cs`, `RightDock.csproj`, `SettingsWindow.xaml`,
+  `SettingsWindow.xaml.cs`.
 
 ---
 

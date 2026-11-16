@@ -123,6 +123,12 @@ namespace RightDock
                 PlaceWindow(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
                 _dockShown = true;
                 if (_settings.AutoHide) _hideDeadline = DateTime.UtcNow.AddMilliseconds(1600);
+
+                NativeMethods.RECT monitor = _appBar.MonitorRect;
+                Services.Log.Info("Dock placed: DPI " + Math.Round(_dpiScale * 100) + "%, monitor "
+                    + monitor.Left + "," + monitor.Top + " " + (monitor.Right - monitor.Left) + "x"
+                    + (monitor.Bottom - monitor.Top) + ", dock " + r.Left + "," + r.Top + " "
+                    + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) + ".");
             }
 
             _hoverTimer.Start();
@@ -181,6 +187,22 @@ namespace RightDock
             {
                 _dpiScale = (wParam.ToInt32() & 0xFFFF) / 96.0;
                 RefreshGeometry();
+            }
+            else if (msg == NativeMethods.WM_POWERBROADCAST)
+            {
+                int reason = wParam.ToInt32();
+                if (reason == NativeMethods.PBT_APMRESUMEAUTOMATIC
+                    || reason == NativeMethods.PBT_APMRESUMESUSPEND)
+                {
+                    Services.Log.Info("System resumed; reconciling scheduled work.");
+                    _services?.Scheduler.Reconcile();
+                    RefreshGeometry();
+                }
+            }
+            else if (msg == NativeMethods.WM_TIMECHANGE)
+            {
+                Services.Log.Info("System clock changed; reconciling scheduled work.");
+                _services?.Scheduler.Reconcile();
             }
 
             return IntPtr.Zero;

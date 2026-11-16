@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Microsoft.Win32;
 using RightDock.Data;
 using RightDock.Modules;
 
@@ -37,6 +41,8 @@ namespace RightDock
         private Button _customSwatch;
         private Brush _iconBrush;
         private Color _currentColor;
+        private readonly DataBackupService _backup;
+        private string _diagnostics;
         private bool _loading = true;
 
         internal SettingsWindow(DockServices services)
@@ -46,6 +52,7 @@ namespace RightDock
             _services = services;
             _settings = services.Settings;
             _modules = services.Modules;
+            _backup = services.Backup;
             _currentColor = ParseColor(_settings.IconColor, Presets[0]);
             _iconBrush = CreateFrozenBrush(_currentColor);
 
@@ -57,6 +64,11 @@ namespace RightDock
             NotificationsToggle.IsChecked = _settings.NotificationsEnabled;
             StartupToggle.IsChecked = StartupRegistration.IsEnabled();
             StartupPathRun.Text = StartupRegistration.ExecutablePath;
+
+            DataPathText.Text = _services.Data.Path;
+            AboutText.Text = "RightDock " + DataBackupService.AppVersion + " · .NET 5 · schema v"
+                + _services.Data.SchemaVersion;
+            RefreshDataSummary();
 
             AutoHideToggle.Checked += AutoHideToggled;
             AutoHideToggle.Unchecked += AutoHideToggled;
@@ -317,7 +329,8 @@ namespace RightDock
             else if (sender == TabAppearance) SelectTab(1);
             else if (sender == TabModules) SelectTab(2);
             else if (sender == TabNotifications) SelectTab(3);
-            else SelectTab(4);
+            else if (sender == TabData) SelectTab(4);
+            else SelectTab(5);
         }
 
         private void SelectTab(int index)
@@ -326,13 +339,218 @@ namespace RightDock
             PageAppearance.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
             PageModules.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
             PageNotifications.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
-            PageStartup.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+            PageData.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+            PageStartup.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
 
             TabGeneral.Tag = index == 0 ? "1" : null;
             TabAppearance.Tag = index == 1 ? "1" : null;
             TabModules.Tag = index == 2 ? "1" : null;
             TabNotifications.Tag = index == 3 ? "1" : null;
-            TabStartup.Tag = index == 4 ? "1" : null;
+            TabData.Tag = index == 4 ? "1" : null;
+            TabStartup.Tag = index == 5 ? "1" : null;
+        }
+
+        private void RefreshDataSummary()
+        {
+            try
+            {
+                BackupInfo info = _backup.GetCurrentInfo();
+                DataSummaryText.Text = info.SchemaVersion > 0
+                    ? "SQLite · schema v" + info.SchemaVersion + " · " + BackupInfo.FormatBytes(info.DatabaseBytes)
+                        + " · " + info.TotalRows.ToString("N0") + " rows"
+                    : "Database unavailable" + (string.IsNullOrWhiteSpace(_services.Data.LastError)
+                        ? "."
+                        : ": " + _services.Data.LastError);
+            }
+            catch (Exception ex)
+            {
+                DataSummaryText.Text = "Could not read the database: " + ex.Message;
+            }
+        }
+
+        private void RunDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                BackupInfo info = _backup.GetCurrentInfo();
+                bool ok = string.Equals(info.Integrity, "ok", StringComparison.OrdinalIgnoreCase);
+
+                SetStatus(DataStatusText,
+                    ok
+                        ? "Integrity check passed · schema v" + info.SchemaVersion + " · "
+                            + BackupInfo.FormatBytes(info.DatabaseBytes) + " · "
+                            + info.TotalRows.ToString("N0") + " rows"
+                        : "Integrity check failed: " + info.Integrity,
+                    ok);
+
+                _diagnostics = BuildDiagnosticsReport(info);
+                RefreshDataSummary();
+            }
+            catch (Exception ex)
+            {
+                SetStatus(DataStatusText, "Diagnostics failed: " + ex.Message, false);
+            }
+        }
+
+        private void OpenDataFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Directory.CreateDirectory(PinStore.DataFolder);
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + PinStore.DataFolder + "\"")
+                {
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                SetStatus(DataStatusText, "Could not open the data folder: " + ex.Message, false);
+            }
+        }
+
+        private void CreateBackup_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "Create RightDock backup",
+                Filter = "RightDock backup (*.zip)|*.zip|All files (*.*)|*.*",
+                DefaultExt = ".zip",
+                AddExtension = true,
+                FileName = "RightDock-backup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".zip",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+
+            if (dialog.ShowDialog(this) != true) return;
+
+            try
+            {
+                BackupInfo info = _backup.CreateBackup(dialog.FileName);
+                SetStatus(BackupStatusText,
+                    "Backup created · " + info.Summary + " · " + Path.GetFileName(dialog.FileName), true);
+            }
+            catch (Exception ex)
+            {
+                SetStatus(BackupStatusText, "Backup failed: " + ex.Message, false);
+            }
+        }
+
+        private void RestoreBackup_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Restore RightDock backup",
+                Filter = "RightDock backup (*.zip)|*.zip|All files (*.*)|*.*",
+                CheckFileExists = true,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            };
+
+            if (dialog.ShowDialog(this) != true) return;
+
+            try
+            {
+                BackupInfo info = _backup.InspectBackup(dialog.FileName);
+
+                MessageBoxResult result = MessageBox.Show(this,
+                    "Restore this backup?\n\n"
+                    + info.Summary + "\nCreated "
+                    + info.CreatedUtc.ToLocalTime().ToString("MMM d, yyyy HH:mm") + "\n\n"
+                    + "RightDock will restart and replace your current data. A safety copy of the "
+                    + "current database is kept in the backup folder.",
+                    "Restore RightDock data", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.OK) return;
+
+                _backup.StageRestore(dialog.FileName);
+                SetStatus(RestoreStatusText, "Restore prepared. Restarting RightDock…", true);
+                RestartForRestore();
+            }
+            catch (Exception ex)
+            {
+                SetStatus(RestoreStatusText, "Restore failed: " + ex.Message, false);
+            }
+        }
+
+        private void CopyDiagnostics_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_diagnostics))
+                {
+                    _diagnostics = BuildDiagnosticsReport(_backup.GetCurrentInfo());
+                }
+
+                Clipboard.SetText(_diagnostics);
+                SetStatus(DataStatusText, "Diagnostics copied to the clipboard.", true);
+            }
+            catch (Exception ex)
+            {
+                SetStatus(DataStatusText, "Could not copy diagnostics: " + ex.Message, false);
+            }
+        }
+
+        private string BuildDiagnosticsReport(BackupInfo info)
+        {
+            var report = new StringBuilder();
+            report.AppendLine("RightDock " + DataBackupService.AppVersion);
+            report.AppendLine("OS: " + Environment.OSVersion.VersionString);
+            report.AppendLine("Framework: .NET " + Environment.Version);
+            report.AppendLine("Database: " + (info.SourcePath ?? PinStore.DataFolder));
+            report.AppendLine("Schema: v" + info.SchemaVersion);
+            report.AppendLine("Integrity: " + info.Integrity);
+            report.AppendLine("Size: " + BackupInfo.FormatBytes(info.DatabaseBytes));
+            report.AppendLine("Rows: " + info.TotalRows.ToString("N0"));
+
+            if (_modules != null)
+            {
+                int enabled = 0;
+                int visible = 0;
+                foreach (ModuleEntry entry in _modules.Entries)
+                {
+                    if (entry.State.IsEnabled) enabled++;
+                    if (entry.State.IsEnabled && entry.State.IsVisible) visible++;
+                }
+
+                report.AppendLine("Modules: " + _modules.Entries.Count + " registered, "
+                    + enabled + " enabled, " + visible + " in dock");
+            }
+
+            foreach (KeyValuePair<string, long> count in info.Counts)
+            {
+                report.AppendLine(count.Key + ": " + count.Value);
+            }
+
+            return report.ToString().TrimEnd();
+        }
+
+        private void RestartForRestore()
+        {
+            string executable = Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(executable))
+            {
+                SetStatus(RestoreStatusText,
+                    "Restore is staged. Close and reopen RightDock to apply it.", false);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(executable, "--restart") { UseShellExecute = true });
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                SetStatus(RestoreStatusText,
+                    "Restore is staged. Close and reopen RightDock to apply it. " + ex.Message, false);
+            }
+        }
+
+        private static void SetStatus(TextBlock block, string text, bool success)
+        {
+            block.Text = text;
+            block.Foreground = new SolidColorBrush(success
+                ? Color.FromRgb(0x63, 0xC1, 0x74)
+                : Color.FromRgb(0xFF, 0x8A, 0x8A));
+            block.Visibility = Visibility.Visible;
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)

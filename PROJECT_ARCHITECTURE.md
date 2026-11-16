@@ -56,9 +56,10 @@ RightDock/
 ├─ IconCatalog.cs            Auto-generated 181 Lucide entries (key, name, category, path)
 ├─ IconRepository.cs         Built-in + user icon resolution, geometry cache, rendering
 ├─ IconPickerWindow.xaml/.cs Icon browser popup ("Choose icon")
-├─ SettingsWindow.xaml/.cs   Five-tab settings window (General, Appearance, Modules, Notifications, Startup)
+├─ SettingsWindow.xaml/.cs   Six-tab settings window (General, Appearance, Modules, Notifications, Data, Startup)
 ├─ Data/
 │  ├─ Database.cs            SQLite connection, pragmas, versioned migrations, query helpers
+│  ├─ DataBackupService.cs   ZIP backup, inspection, staged restore and safety copies
 │  ├─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config)
 │  ├─ FocusStore.cs          FocusSessions rows, recent activity, daily totals, ranges
 │  ├─ TaskStore.cs           Tasks CRUD, views, search, counts, ranges, recurrence-insert
@@ -99,28 +100,38 @@ RightDock/
 ├─ tools/
 │  ├─ gen-icons.js           Generates IconCatalog.cs from Lucide data
 │  ├─ lucide-icon-nodes.json Lucide source data (icon name → SVG nodes)
+│  ├─ make-icon.ps1          Draws and writes the multi-size app icon (Resources\RightDock.ico)
 │  ├─ ui.ps1                 UIA test helper: list/inspect/invoke/click/type/screenshot
 │  ├─ watch-toast.ps1        Polls for notification cards and can click them
-│  └─ close-dock.ps1         Graceful WM_CLOSE of the running dock
+│  ├─ close-dock.ps1         Graceful WM_CLOSE of the running dock
+│  ├─ measure.ps1            Process CPU/RAM/handle profiling sample
+│  ├─ stress-ui.ps1          Repeated module popup open/close with leak metrics
+│  └─ publish.ps1            Release publish, portable ZIP and optional Inno Setup compile
+├─ Resources/RightDock.ico   Application icon (PNG entries 16–256 px)
+├─ installer/RightDock.iss   Inno Setup 6 installer definition
+├─ THIRD-PARTY-NOTICES.md    Lucide, Feather, Microsoft.Data.Sqlite and SQLite notices
 ├─ PROJECT_ARCHITECTURE.md   This document
 ├─ IMPLEMENTATION_PROGRESS.md
 └─ CHANGELOG.md
 ```
 
-`bin/`, `obj/` and `publish/` are build outputs and are not versioned. User data lives
-outside the repository (see §8).
+`bin/`, `obj/`, `publish/` and `dist/` are build outputs and are not versioned. User data
+lives outside the repository (see §8).
 
 ---
 
 ## 3. Startup and lifecycle
 
 ```
-RightDock.exe
+RightDock.exe [--restart]
    └─ App.OnStartup
-        ├─ Mutex "Local\RightDock.SingleInstance" (second instance → Shutdown)
+        ├─ Mutex "Local\RightDock.SingleInstance" (second instance → Shutdown;
+        │  --restart waits up to 10 s for the previous instance to release it)
+        ├─ DataBackupService.ApplyPendingRestore() (before the database is opened)
         ├─ new DockServices()
         │    ├─ settings.json → AppSettings
         │    ├─ Database.Initialize() (WAL, foreign keys, migrations)
+        │    ├─ DataBackupService
         │    ├─ Scheduler, NotificationService, ModuleManager
         │    └─ Modules.Start() → Initialize/Activate each enabled module
         └─ new MainWindow(services).Show()
@@ -130,10 +141,11 @@ RightDock.exe
              └─ OnLoaded: reserve AppBar, place window, start 110 ms hover timer
 ```
 
-Shutdown is user-driven only: the Close button calls `Window.Close()`.
-`OnClosing` sets `_closing`, stops timers, and calls `ABM_REMOVE` so the reserved work
-area is released immediately. `App.OnExit` disposes `DockServices` (module lifecycle,
-scheduler, notifications, database).
+Shutdown is user-driven only, except the restore flow, which stages a backup and starts a
+new process with `--restart` before shutting the current one down. `OnClosing` sets
+`_closing`, stops timers, and calls `ABM_REMOVE` so the reserved work area is released
+immediately. `App.OnExit` disposes `DockServices` (module lifecycle, scheduler,
+notifications, database).
 
 The dock is a tool window: `ShowInTaskbar=false`, `ShowActivated=false`,
 `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, topmost via both `Topmost=true` and
@@ -301,6 +313,9 @@ immediate `ModuleManager` calls, and persisted immediately; there is no Save/App
 ├─ pins.json       [ { "Name": …, "Path": …, "Icon": "lucide:…" } ]
 ├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "NotificationsEnabled": true }
 ├─ rightdock.db    SQLite database (WAL): module state + all productivity data
+├─ backups\        ZIP backups chosen by the user, plus pre-restore-<timestamp>\ safety copies
+├─ restore-staging\  extracted backup awaiting apply at next start
+├─ restore.pending   marker written by StageRestore; deleted after a successful apply
 ├─ logs\           rightdock.log (1 MB rotation, UTC timestamps)
 └─ icons\          optional user *.svg icons (created on demand)
 ```
@@ -336,13 +351,54 @@ module keeps its row and all module data intact.
 | File launch | `Process.Start(UseShellExecute=true)` with the exe's folder as working directory |
 | Icon extraction | `SHGetFileInfo` with `.exe` fallback for missing targets |
 | DPI | PerMonitorV2 manifest + `WM_DPICHANGED` handling |
+| Display change | `WM_DISPLAYCHANGE` → re-read monitor rect and re-reserve |
+| Sleep / resume | `WM_POWERBROADCAST` (`PBT_APMRESUMEAUTOMATIC`, `PBT_APMRESUMESUSPEND`) → scheduler reconcile + re-reserve |
+| Clock change | `WM_TIMECHANGE` → scheduler reconcile |
 | Fullscreen detection | `ABN_FULLSCREENAPP` from the shell |
 | Notifications | In-app `ToastWindow` cards (no shell tray icon) |
+| Backup / restore | ZIP archive with manifest, staged restore applied before DB open, safety copy |
 
 Storage failures are non-fatal by design: corrupt or missing JSON falls back to
 defaults, database errors are logged and degrade to in-memory module defaults, and
 writes are wrapped so a locked file cannot take down the dock. Pins are never deleted by
 settings changes; startup registration is the only registry state the app owns.
+
+### 8.1 Backup and restore (`Data/DataBackupService.cs`, 1.8.0)
+
+A backup is one ZIP chosen by the user (default name
+`RightDock-backup-yyyyMMdd-HHmmss.zip`) containing:
+
+| Entry | Source |
+| --- | --- |
+| `rightdock.db` | `SqliteConnection.BackupDatabase` copy, switched to `journal_mode=DELETE` so the archive is one self-contained file (no `-wal`/`-shm`) |
+| `settings.json` | dock settings (auto-hide, icon color, notifications) |
+| `pins.json` | dock pins |
+| `icons/` | user SVG icons, when present |
+| `backup.json` | app version, UTC creation time, schema version and per-table row counts |
+
+Create validates the copy (`PRAGMA integrity_check`, schema range 1…current) before
+zipping, so a corrupt archive is never produced. `InspectBackup` extracts the database
+to a temp folder, re-validates it and returns a summary used by the confirmation dialog
+(`schema v3 · 4.2 MB · 1,234 rows`).
+
+Restore is staged, not applied live: `StageRestore` extracts entries with a path-traversal
+guard, validates the staged database and JSON, then writes `restore.pending`. The settings
+window starts a new process with `--restart` and shuts down; at the next start
+`ApplyPendingRestore()` runs **before** the database is opened:
+
+1. Re-validate the staged database; stop on failure.
+2. Copy the current database, settings and pins to
+   `backups\pre-restore-yyyyMMdd-HHmmss\`.
+3. Delete `rightdock.db-wal`/`-shm`, copy the staged database (and its WAL/SHM when the
+   archive contains them), then settings, pins and icons.
+4. Delete the staging folder and marker, log the row counts, and show the
+   "Backup restored" toast.
+5. On any exception, roll the database back from the safety copy, delete the marker and
+   show "Restore failed" with the reason.
+
+The `--restart` process waits for the single-instance mutex (40 × 250 ms) so it cannot
+open the database while the old process is still shutting down; a duplicate start without
+`--restart` exits immediately.
 
 ---
 
@@ -370,7 +426,11 @@ settings changes; startup registration is the only registry state the app owns.
   seconds over 30 s**; 1.6.0 with all ten modules registered and every Phase 4 view
   opened once idles at **~146 MB working set, ~94 MB private, 0.08 CPU seconds over
   30 s**; 1.7.0 with twelve modules registered idles at **126.8 MB working set, 71.5 MB
-  private, 0.047 CPU seconds over 30 s** (Windows 11, 2560×1600 @125 %).
+  private, 0.047 CPU seconds over 30 s** (Windows 11, 2560×1600 @125 %); 1.8.0 idles at
+  **150.4 MB working set, 98.9 MB private, 0.016 CPU seconds over 10 s, 476 handles,
+  9 threads**. A 27-cycle UI stress run (~650 popup open/close operations across all
+  twelve modules) plateaued at **≈111 MB private / ≈163 MB working set with flat handles
+  (483–492), GDI (38) and USER (31) counts**, confirming popups are reclaimed after GC.
 
 These constraints are the benchmark for every new module: reuse the process, avoid
 polling, prefer timestamp math over per-item timers, load UI on demand.
@@ -393,6 +453,21 @@ dotnet build RightDock.csproj
 
 `IconCatalog.cs` is marked auto-generated; manual edits are overwritten.
 
+Release tooling:
+
+| Script | Purpose |
+| --- | --- |
+| `tools/publish.ps1` | Refuses to run while RightDock is open, reads the version from the csproj, publishes `win-x64` framework-dependent (or `-SelfContained`), writes `dist\RightDock-<version>-win-x64.zip`, and compiles the installer with `-Installer` when Inno Setup 6 is installed |
+| `tools/make-icon.ps1` | Draws the 256 px dock glyph and writes `Resources\RightDock.ico` with seven PNG-compressed sizes (16–256) |
+| `tools/measure.ps1` | Samples working set, private bytes, CPU seconds/percent, handles and threads over a fixed window |
+| `tools/stress-ui.ps1` | Invokes every module button twice per cycle, then reports private/working set, handle, GDI and USER deltas |
+
+The installer is Inno Setup 6 (`installer/RightDock.iss`): per-user install under
+`{autopf}\RightDock`, x64, Windows 10 1809+, Start Menu and optional desktop icons,
+`AppMutex=Local\RightDock.SingleInstance`, and the same framework-dependent files as the
+portable ZIP. The .NET 5 Desktop Runtime is a documented prerequisite; no installer is
+included in source control because `dist/` is generated.
+
 ---
 
 ## 11. Productivity modules
@@ -401,8 +476,9 @@ The master specification evolves RightDock into a productivity and life-manageme
 system while preserving everything above. **Phase 1 (core infrastructure) is implemented
 in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
 Medication, Health & Lifestyle) in 1.5.0, Phase 4 (Dashboard, Notes manager,
-Calendar/planner, Statistics) in 1.6.0, and Phase 5 (Quick Tools and Learning) in
-1.7.0**; the launcher, AppBar, auto-hide, icons and settings keep their contracts.
+Calendar/planner, Statistics) in 1.6.0, Phase 5 (Quick Tools and Learning) in
+1.7.0, and Phase 6 (hardening, data tools and release assets) in 1.8.0**; the
+launcher, AppBar, auto-hide, icons and settings keep their contracts.
 
 ### 11.1 Layering
 
@@ -633,14 +709,37 @@ Key behaviors:
   All/Active/Completed; category chips are derived from the goal data. Week statistics
   start Monday and count sessions in the current week.
 
-### 11.11 Settings evolution
+### 11.11 Data tools and hardening (implemented in 1.8.0)
 
-The current settings window covers General, Appearance, **Modules** (enable/disable,
-hide/show in dock) and **Notifications** (master toggle + test). Later phases add Dock,
-Data & Backup, About, and per-module settings pages while keeping `settings.json` keys
-compatible and defaulting safely.
+Phase 6 adds no new productivity module; it hardens the platform and exposes data
+maintenance in Settings.
 
-### 11.12 Module phases
+- **Database diagnostics (`Database.cs`)** — `SchemaVersion` (`PRAGMA user_version`),
+  `SizeBytes` (database + WAL + SHM), `IntegrityCheck()` (`PRAGMA integrity_check`),
+  `CountRows(table)` over an explicit whitelist (`KnownTables`) and `BackupTo(path)` via
+  `SqliteConnection.BackupDatabase`, which also switches the copy from WAL to DELETE mode.
+- **Data & Backup tab** (`SettingsWindow`) — shows the database path, schema, size and row
+  total; "Open data folder", "Run integrity check", "Create backup…", "Restore backup…",
+  "Copy diagnostics". Status lines turn green on success and red on failure. The About row
+  reads `RightDock <version> · .NET 5 · schema v3`.
+- **Restart flow** — restore stages the archive, then `Process.Start(exe, "--restart")`
+  and `Application.Shutdown()`. The new process waits on the instance mutex and applies
+  the staged restore before opening SQLite, so no module ever sees a replaced database.
+- **OS resilience** — `WM_POWERBROADCAST` resume and `WM_TIMECHANGE` call
+  `Scheduler.Reconcile()`; resume and `WM_DISPLAYCHANGE` call `RefreshGeometry()`, which
+  re-reads the monitor and re-reserves the AppBar. This covers sleep/resume, clock
+  changes, monitor hot-plug and resolution changes on the primary display.
+- **Release assets** — deterministic `RightDock.ico`, portable ZIP, Inno Setup script,
+  third-party notices and version/company metadata in the executable.
+
+### 11.12 Settings evolution
+
+The settings window covers General, Appearance, **Modules** (enable/disable, hide/show in
+dock), **Notifications** (master toggle + test), **Data** (diagnostics, backup, restore,
+copy diagnostics) and **Startup**. `settings.json` keys stay compatible and default
+safely; the window is 560×560 with six tabs.
+
+### 11.13 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -649,9 +748,9 @@ compatible and defaulting safely.
 | 3 | Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested (1.5.0) |
 | 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ✔ Done ✔ Tested (1.6.0) |
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ✔ Done ✔ Tested (1.7.0) |
-| 6 | Profiling, leak checks, migration/backup tests, startup/sleep/multi-monitor tests, installer readiness | ◻ Pending |
+| 6 | Profiling, leak checks, migration/backup/restore, startup/sleep/display tests, installer readiness | ✔ Done ✔ Tested (1.8.0) |
 
-### 11.13 Invariants for future work
+### 11.14 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.
@@ -667,13 +766,17 @@ compatible and defaulting safely.
 ```bash
 cd "D:\Quder Test\RightDock"
 dotnet build -c Release
-dotnet publish -c Release -r win-x64 --self-contained false -o publish
+powershell -ExecutionPolicy Bypass -File tools\publish.ps1
 publish\RightDock.exe
 ```
 
-Stop the running instance before republishing (the exe/dll are locked while running).
-`publish/` must include the SQLite native runtimes (`runtimes/win-x64/native/e_sqlite3.dll`);
-`dotnet publish` copies them automatically.
+`tools\publish.ps1` writes `publish\` and the portable ZIP
+`dist\RightDock-1.8.0-win-x64.zip`; add `-Installer` to compile
+`dist\RightDock-1.8.0-setup.exe` with Inno Setup 6 (install it from
+https://jrsoftware.org/isinfo.php first). Stop the running instance before republishing
+(the exe/dll are locked while running). `publish/` must include the SQLite native
+runtimes (`runtimes/win-x64/native/e_sqlite3.dll`); `dotnet publish` copies them
+automatically.
 
 User-facing behavior:
 
@@ -682,6 +785,8 @@ User-facing behavior:
 - **Add** opens a multi-select file picker (`exe`, `lnk`, `bat`, `cmd`, `msc`, `appref-ms`).
 - Module icons appear above the Add/Settings/Close stack; left-click opens the compact
   popup (click again to close), right-click offers **Open** / **Hide from dock**.
-- **Settings** opens the five-tab window; changes apply instantly.
+- **Settings** opens the six-tab window; changes apply instantly. **Data** creates or
+  restores a backup, runs an integrity check, opens the data folder and copies
+  diagnostics; restore restarts the app automatically.
 - Notifications appear as dark cards in the bottom-right corner.
 - **Close** exits and releases the reserved space.

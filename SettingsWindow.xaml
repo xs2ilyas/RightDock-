@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Settings"
-        Width="500" Height="520"
+        Width="560" Height="560"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="Manual"
         FontFamily="Segoe UI Variable Text, Segoe UI"
@@ -71,7 +71,7 @@
             <Setter Property="Height" Value="30"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#9A9A9A"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -223,6 +223,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="TabGeneral" Grid.Column="0" Style="{StaticResource TabButton}"
                             Content="General" Click="Tab_Click"/>
@@ -232,7 +233,9 @@
                             Content="Modules" Click="Tab_Click"/>
                     <Button x:Name="TabNotifications" Grid.Column="3" Style="{StaticResource TabButton}"
                             Content="Notifications" Click="Tab_Click"/>
-                    <Button x:Name="TabStartup" Grid.Column="4" Style="{StaticResource TabButton}"
+                    <Button x:Name="TabData" Grid.Column="4" Style="{StaticResource TabButton}"
+                            Content="Data" Click="Tab_Click"/>
+                    <Button x:Name="TabStartup" Grid.Column="5" Style="{StaticResource TabButton}"
                             Content="Startup" Click="Tab_Click"/>
                 </Grid>
             </Border>
@@ -336,6 +339,64 @@
                                LineHeight="16" Margin="0,14,0,0"
                                Text="Notifications appear as RightDock cards in the bottom-right corner and fade out after a few seconds. Clicking a card runs its action, such as opening the related module."/>
                 </StackPanel>
+
+                <ScrollViewer x:Name="PageData" Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,0,6,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="LOCAL DATA"/>
+                        <TextBlock x:Name="DataPathText" Foreground="#9A9A9A" FontSize="10.5"
+                                   TextWrapping="Wrap" LineHeight="15" Margin="2,0,0,0"/>
+                        <TextBlock x:Name="DataSummaryText" Foreground="#CFCFCF" FontSize="11.5"
+                                   Margin="2,8,0,0"/>
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button x:Name="OpenDataFolderButton" Style="{StaticResource LinkButton}"
+                                    Content="Open data folder" Margin="2,0,18,0"
+                                    Click="OpenDataFolder_Click"
+                                    AutomationProperties.AutomationId="OpenDataFolderButton"/>
+                            <Button x:Name="RunDiagnosticsButton" Style="{StaticResource LinkButton}"
+                                    Content="Run integrity check"
+                                    Click="RunDiagnostics_Click"
+                                    AutomationProperties.AutomationId="RunDiagnosticsButton"/>
+                        </WrapPanel>
+                        <TextBlock x:Name="DataStatusText" Margin="2,8,0,0" FontSize="11"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <Border Style="{StaticResource Divider}"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="BACKUP"/>
+                        <TextBlock Style="{StaticResource RowDescription}" Margin="2,0,0,6"
+                                   Text="Create one archive with the database, pins, settings and custom icons."/>
+                        <Button x:Name="CreateBackupButton" Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Left" Content="Create backup…"
+                                Click="CreateBackup_Click"
+                                AutomationProperties.AutomationId="CreateBackupButton"/>
+                        <TextBlock x:Name="BackupStatusText" Margin="2,8,0,0" FontSize="11"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <Border Style="{StaticResource Divider}"/>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="RESTORE"/>
+                        <TextBlock Style="{StaticResource RowDescription}" Margin="2,0,0,6"
+                                   Text="Restoring replaces current data and restarts RightDock. A safety copy of the current database is kept in the backup folder."/>
+                        <Button x:Name="RestoreBackupButton" Style="{StaticResource LinkButton}"
+                                HorizontalAlignment="Left" Content="Restore backup…"
+                                Click="RestoreBackup_Click"
+                                AutomationProperties.AutomationId="RestoreBackupButton"/>
+                        <TextBlock x:Name="RestoreStatusText" Margin="2,8,0,0" FontSize="11"
+                                   TextWrapping="Wrap" Visibility="Collapsed"/>
+                        <Border Style="{StaticResource Divider}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="AboutText" Foreground="#7F7F7F" FontSize="10.5"
+                                       VerticalAlignment="Center" TextWrapping="Wrap"/>
+                            <Button x:Name="CopyDiagnosticsButton" Grid.Column="1"
+                                    Style="{StaticResource LinkButton}" Content="Copy diagnostics"
+                                    Margin="12,0,2,0" Click="CopyDiagnostics_Click"
+                                    AutomationProperties.AutomationId="CopyDiagnosticsButton"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
 
             </Grid>
 

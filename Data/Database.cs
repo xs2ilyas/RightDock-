@@ -11,6 +11,14 @@ namespace RightDock.Data
     {
         internal static readonly string DefaultPath = System.IO.Path.Combine(PinStore.DataFolder, "rightdock.db");
 
+        internal static readonly string[] KnownTables =
+        {
+            "Tasks", "TaskCategories", "Projects", "Reminders", "FocusSessions",
+            "Habits", "HabitLogs", "Medications", "MedicationSchedules", "MedicationLogs",
+            "HealthLogs", "Notes", "LearningGoals", "LearningSessions", "BreathingSessions",
+            "AppSettings", "ModuleSettings",
+        };
+
         private static readonly (int Version, string Sql)[] Migrations =
         {
             (1, @"
@@ -221,6 +229,8 @@ CREATE INDEX IF NOT EXISTS IX_BreathingSessions_Started ON BreathingSessions(Sta
 ")
         };
 
+        internal const int CurrentSchemaVersion = 3;
+
         private readonly object _gate = new object();
         private readonly string _path;
 
@@ -237,6 +247,127 @@ CREATE INDEX IF NOT EXISTS IX_BreathingSessions_Started ON BreathingSessions(Sta
         internal bool IsAvailable { get; private set; }
 
         internal string LastError { get; private set; }
+
+        internal int SchemaVersion
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    if (_connection == null) return 0;
+                    object value = ScalarCore("PRAGMA user_version;", null);
+                    return value == null ? 0 : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                }
+            }
+        }
+
+        internal long SizeBytes
+        {
+            get
+            {
+                long total = 0;
+                foreach (string path in new[] { _path, _path + "-wal", _path + "-shm" })
+                {
+                    try
+                    {
+                        var file = new FileInfo(path);
+                        if (file.Exists) total += file.Length;
+                    }
+                    catch
+                    {
+                        // Size reporting is best-effort.
+                    }
+                }
+
+                return total;
+            }
+        }
+
+        internal string IntegrityCheck()
+        {
+            lock (_gate)
+            {
+                if (_connection == null) return "database unavailable";
+
+                try
+                {
+                    object value = ScalarCore("PRAGMA integrity_check;", null);
+                    return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "no result";
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Database integrity check failed.", ex);
+                    return ex.Message;
+                }
+            }
+        }
+
+        internal long CountRows(string table)
+        {
+            if (Array.IndexOf(KnownTables, table) < 0)
+                throw new ArgumentOutOfRangeException(nameof(table));
+
+            lock (_gate)
+            {
+                if (_connection == null) return 0;
+
+                try
+                {
+                    object value = ScalarCore("SELECT COUNT(*) FROM " + table + ";", null);
+                    return value == null ? 0 : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Could not count rows in " + table + ".", ex);
+                    return 0;
+                }
+            }
+        }
+
+        internal bool BackupTo(string destinationPath)
+        {
+            if (string.IsNullOrWhiteSpace(destinationPath)) return false;
+
+            lock (_gate)
+            {
+                if (_connection == null) return false;
+
+                try
+                {
+                    string folder = System.IO.Path.GetDirectoryName(destinationPath);
+                    if (!string.IsNullOrEmpty(folder)) Directory.CreateDirectory(folder);
+                    if (File.Exists(destinationPath)) File.Delete(destinationPath);
+
+                    var builder = new SqliteConnectionStringBuilder
+                    {
+                        DataSource = destinationPath,
+                        Mode = SqliteOpenMode.ReadWriteCreate,
+                        Cache = SqliteCacheMode.Private,
+                    };
+
+                    using (var target = new SqliteConnection(builder.ToString()))
+                    {
+                        target.Open();
+                        _connection.BackupDatabase(target);
+
+                        // The backup inherits WAL mode; switch it back so the copy is a
+                        // single self-contained file instead of db + wal + shm.
+                        using (SqliteCommand journal = target.CreateCommand())
+                        {
+                            journal.CommandText = "PRAGMA journal_mode=DELETE;";
+                            journal.ExecuteNonQuery();
+                        }
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Could not create a database backup.", ex);
+                    return false;
+                }
+            }
+        }
 
         internal void Initialize()
         {

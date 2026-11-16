@@ -9,9 +9,12 @@
     <AssemblyName>RightDock</AssemblyName>
     <RootNamespace>RightDock</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.7.0</Version>
+    <ApplicationIcon>Resources\RightDock.ico</ApplicationIcon>
+    <Version>1.8.0</Version>
     <Product>Right Dock</Product>
     <AssemblyTitle>Right Dock</AssemblyTitle>
+    <Company>RightDock</Company>
+    <Description>Productivity and life management dock for Windows.</Description>
   </PropertyGroup>
 
   <ItemGroup>

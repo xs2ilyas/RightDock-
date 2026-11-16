@@ -1,10 +1,12 @@
 # RightDock — Implementation Progress
 
-> Release **1.7.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.8.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
-> Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) complete.
-> Next up: **Phase 6** (hardening, profiling, migration/backup and installer readiness).
+> Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
+> hardening (profiling, backup/restore, migration and OS-event tests, installer assets)
+> complete.
+> Next up: post-1.8 maintenance (see §13 known limitations).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -24,8 +26,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.5.0 | Phase 3: Habits, Medication, Health & Lifestyle | ✔ Done ✔ Tested |
 | v1.6.0 | Phase 4: Dashboard, Daily Overview, Notes manager, Calendar planner, Statistics | ✔ Done ✔ Tested |
 | v1.7.0 | Phase 5: Quick Tools (notes, breathing, screen breaks) + Learning tracker | ✔ Done ✔ Tested |
+| v1.8.0 | Phase 6: profiling/leak checks, migration and backup/restore tests, sleep/display handling, installer assets | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
-| Phase 6 | Profiling, leak/migration/backup/multi-monitor testing | ◻ Pending |
 
 ---
 
@@ -508,7 +510,105 @@ manager, file manager or journal was added.
 
 ---
 
-## 10. Documentation and repository (completed)
+## 10. v1.8.0 — Phase 6 hardening (completed, tested)
+
+Phase 6 adds no productivity module. It hardens data safety and OS integration, and adds
+the release infrastructure.
+
+### Database diagnostics (`Data/Database.cs`)
+- `SchemaVersion` (`PRAGMA user_version`), `SizeBytes` (database + WAL + SHM),
+  `IntegrityCheck()`, `CountRows(table)` behind an explicit `KnownTables` whitelist, and
+  `BackupTo(path)` using `SqliteConnection.BackupDatabase`.
+- A backup copy is switched from WAL to DELETE journal mode after copying, so archives
+  contain one self-contained `rightdock.db` and never a stale `-wal`/`-shm` pair.
+
+### Backup and restore (`Data/DataBackupService.cs`)
+- **Format:** ZIP with `rightdock.db`, `settings.json`, `pins.json`, optional `icons/` and
+  `backup.json` (app version, UTC time, schema version, per-table counts).
+- **Create:** consistent online copy, integrity and schema validation, then compress to
+  the user-selected path (default `RightDock-backup-yyyyMMdd-HHmmss.zip`). The settings
+  window reports `Backup created · schema v3 · 212.0 KB · 44 rows · <file>`.
+- **Inspect:** extracts the database to a temp folder, validates it and returns the
+  summary shown in the confirmation dialog.
+- **Stage:** extracts the archive with a path-traversal guard, validates the staged
+  database and JSON files, and writes `restore.pending`.
+- **Apply (next start, before SQLite opens):** validates again, copies the current DB,
+  settings and pins to `backups\pre-restore-yyyyMMdd-HHmmss\`, replaces them from staging
+  (including WAL/SHM when present), removes the marker and logs the restored summary. On
+  failure it rolls the database back from the safety copy and reports the error.
+
+### Settings: Data tab
+- Database path, `SQLite · schema v3 · <size> · <rows>`, Open data folder, Run integrity
+  check, Create backup…, Restore backup…, Copy diagnostics and the About row
+  (`RightDock 1.8.0 · .NET 5 · schema v3`).
+- Restore shows a warning with the archive summary; confirming starts
+  `RightDock.exe --restart` and shuts down. The new process waits up to 10 s on the
+  instance mutex, applies the staged restore, shows a "Backup restored" toast and keeps a
+  single process.
+- "Copy diagnostics" puts a plain-text report (version, OS, runtime, DB path, schema,
+  integrity, size, row totals, modules and table counts) on the clipboard.
+
+### OS-event hardening
+- `WM_POWERBROADCAST` resume (`PBT_APMRESUMEAUTOMATIC`/`PBT_APMRESUMESUSPEND`) and
+  `WM_TIMECHANGE` call `Scheduler.Reconcile()`; resume and `WM_DISPLAYCHANGE` call
+  `RefreshGeometry()`, which re-reads the monitor and re-reserves the AppBar.
+
+### Release assets and tooling
+- `Resources/RightDock.ico` — deterministic multi-size icon (16–256 px PNG entries) drawn
+  by `tools/make-icon.ps1`; the csproj embeds it and sets Version 1.8.0, CompanyName,
+  ProductName and description.
+- `installer/RightDock.iss` — Inno Setup 6 per-user installer (x64, Windows 10 1809+,
+  Start Menu/optional desktop icon, AppMutex).
+- `tools/publish.ps1` — publish + portable ZIP (`dist\RightDock-1.8.0-win-x64.zip`), with
+  `-Installer` to compile the setup when Inno Setup is installed.
+- `tools/measure.ps1` — CPU/RAM/handle/thread sampling; `tools/stress-ui.ps1` — repeated
+  module popup open/close with private/working/handle/GDI/USER metrics.
+- `THIRD-PARTY-NOTICES.md` — Lucide ISC, Feather MIT, Microsoft.Data.Sqlite MIT, SQLite
+  public domain.
+
+### Verified on a live Windows 11 session
+- **Data page:** rendered with six tabs at 560×560; showed
+  `C:\Users\DELL\AppData\Roaming\RightDock\rightdock.db`,
+  `SQLite · schema v3 · 260.1 KB · 44 rows`, and "Run integrity check" reported
+  `Integrity check passed · schema v3 · 260.1 KB · 44 rows`.
+- **Backup:** created through the Save dialog; the archive contained `backup.json`,
+  `pins.json`, `settings.json`, `rightdock.db` and no WAL/SHM files; the embedded database
+  reported `journal_mode=delete`, `user_version=3`, `integrity_check=ok` and 44 rows.
+- **Restore:** added a "Phase 6 restore probe" note (1 → 2 notes), restored the archive
+  through the UI (confirmation showed `schema v3 · 212.0 KB · 44 rows`), the app
+  restart-cycled from PID 12380 to 24800, notes returned to 1 ("Weekly review only"),
+  and `backups\pre-restore-20261116-141505\` held a valid database containing both
+  pre-restore notes plus settings and pins. The log recorded the staged restore, the
+  `(restart)` start and "Backup restored".
+- **Single instance:** launching `RightDock.exe` while running left one process;
+  launching with `--restart` waited out the 10 s window and exited without creating a
+  duplicate.
+- **Migration:** a v1 fixture (schema v1, 4 tasks, 2 medication logs, 1 note) was placed
+  at the live path; startup logged `Applied database migration v2`/`v3`, and the resulting
+  database had `user_version=3`, `BreathingSessions`, `MedicationLogs.SnoozeUntilUtc`,
+  integrity `ok` and all rows retained. The exact pre-test database was restored
+  afterwards.
+- **OS events:** posted `WM_POWERBROADCAST 0x12`, `WM_TIMECHANGE` and `WM_DISPLAYCHANGE`
+  to the dock window; the log recorded "System resumed; reconciling scheduled work." and
+  "System clock changed; reconciling scheduled work." and the reserved rect stayed
+  `2498,0 62×1540`.
+- **Profiling/leak check:** `tools/measure.ps1` idle sample: 150.4 MB working set,
+  98.9 MB private, 0.016 CPU seconds over 10 s, 476 handles, 9 threads.
+  `tools/stress-ui.ps1`: 27 cycles × 12 modules × open+close (~650 popups); private
+  memory rose from 56.5 MB to ≈111 MB and plateaued there for the last 15 cycles while
+  handles (483–492), GDI (38) and USER (31) stayed flat — no leak; the initial rise was
+  WPF caching plus uncollected short-lived objects.
+- **Regression:** all twelve modules opened after migration, restart and stress; Notes
+  showed "Weekly review", Tasks loaded its list; no errors or exceptions in the log.
+- **Installer readiness:** `publish\RightDock.exe` reports FileVersion 1.8.0.0,
+  ProductVersion 1.8.0, CompanyName RightDock and product "Right Dock" with the embedded
+  icon; `dist\RightDock-1.8.0-win-x64.zip` contains 37 files. Inno Setup 6 is not
+  installed on this machine, so `RightDock-1.8.0-setup.exe` was not compiled; the `.iss`
+  and `-Installer` path are ready for a build machine.
+
+---
+
+## 11. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -518,38 +618,45 @@ manager, file manager or journal was added.
 
 ---
 
-## 11. Measured resource baseline
+## 12. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
-visible, all twelve modules registered, no popups open, 30 s idle sample):
+visible, all twelve modules registered, no popups open, 10 s idle sample with
+`tools/measure.ps1`):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 126.8 MB |
-| Private bytes | 71.5 MB |
-| Idle CPU | 0.047 CPU seconds over 30 s |
+| Working set | 150.4 MB |
+| Private bytes | 98.9 MB |
+| Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
+| Handles / threads | 476 / 9 |
 | Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
+
+Stress test (`tools/stress-ui.ps1`, 27 cycles × 12 modules × open+close ≈ 650 popups):
+private memory rose from 56.5 MB to ≈111 MB, then stayed between 107.7 and 111.8 MB for
+the final 15 cycles while working set settled at ≈163 MB, handles stayed at 483–492, GDI
+at 38 and USER at 31. The initial growth is WPF view caching and short-lived objects
+awaiting GC; steady-state counts are flat, so no leak was found.
 
 Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
 ≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
 ≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %; 1.6.0 Phase 4 after
 opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB / 71.5 MB /
-0.047 CPU seconds over 30 s. The Phase 4 figure includes WPF caching Dashboard, Calendar
-and Statistics visual trees after first open; the Phase 5 figure is an idle measurement
-after restart. Phase 6 will repeat this with profiling tools, memory-leak checks, and
-idle-vs-active comparisons per module.
+0.047 CPU seconds over 30 s; 1.8.0 idle 150.4 MB / 98.9 MB / 0.016 CPU seconds over
+10 s. The 1.8.0 idle sample was taken after the stress run, so WPF's retained views are
+included.
 
 ---
 
-## 12. Known limitations (current release)
+## 13. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
-- **Hover polling** — 110 ms `GetCursorPos` instead of event hooks; cheap but scheduled
-  for review in Phase 6.
+- **Hover polling** — 110 ms `GetCursorPos` instead of event hooks; kept after the Phase 6
+  review because CPU cost measured at 0.016 CPU seconds over 10 s idle.
 - **No pin reordering** — order is insertion order; drag-to-reorder is pending.
 - **Fixed pin icon size** (26 px) — icon-size setting is pending.
 - **Missing dock settings** — width, position, always-on-top and tooltip toggles from the
@@ -559,7 +666,9 @@ idle-vs-active comparisons per module.
 - **SVG parser** is intentionally minimal (no transforms, styles, gradients, arcs
   outside path data).
 - **Startup entry is static** — if the exe is moved, the Run value must be re-toggled.
-- **No installer or code signing** — distributed as a `publish` folder.
+- **Installer is unsigned and unbuilt here** — `installer/RightDock.iss` and
+  `tools/publish.ps1 -Installer` are ready, but Inno Setup 6 was not installed on the test
+  machine, so only the portable ZIP was produced; there is no code signing certificate.
 - **Recurrence is preset-based** — tasks support none/daily/weekly/monthly and reminders
   support one-time/daily/weekly/custom-N-days; there is no full RRULE engine (no "every
   weekday", "last Friday", or end-date rules yet).
@@ -583,8 +692,8 @@ idle-vs-active comparisons per module.
 - **Module settings page is reserved** — `CreateSettingsView()` exists on the contract but
   no generic host for module-specific settings exists yet; module options currently live
   in each expanded view.
-- **Settings window is fixed-size** (500×520, five tabs); future categories will require
-  a scrollable layout.
+- **Settings window is fixed-size** (560×560, six tabs); later categories still require a
+  scrollable layout.
 - **Habit streaks use a 400-day window** — current/best streaks are computed from logs in
   the last 400 days (enough for daily habits); longer history is not considered.
 - **Habit week view covers 7 days** — the habit dashboard matrix shows the current week;
@@ -596,8 +705,11 @@ idle-vs-active comparisons per module.
   computed from schedules rather than persisted rows.
 - **Health metrics are fixed** — the eight metrics have preset targets, units and steps;
   user-defined metrics require the per-module settings page planned for a later phase.
-- **No backup/restore/export/import** — the SQLite file can be copied manually while the
-  app is closed; first-class data tools arrive in Phase 6.
+- **Backups are manual archives** — create/restore one ZIP at a time from Settings; there
+  is no scheduled backup, no cloud sync, no automatic rotation and no export to CSV/JSON.
+  Log files and the `backups\` folder itself are not included in archives. Restoring
+  always restarts the app, and a backup made by a newer schema opens read-only validation
+  only up to the current schema version.
 - **Breathing is foreground-only** — the session runs on the UI thread and pauses when
   the process is closed; there is no lock-screen or background continuation.
 - **Screen-break interval is wall-clock** — reminders fire on the scheduler interval
@@ -611,7 +723,7 @@ idle-vs-active comparisons per module.
 
 ---
 
-## 13. Pending roadmap
+## 14. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -653,15 +765,15 @@ idle-vs-active comparisons per module.
 - [x] Enforce the "do not implement" list (no stopwatch, calculator, clipboard manager,
       file manager, journal, etc.).
 
-### Phase 6 — Hardening
-- [ ] CPU/RAM profiling per module; memory-leak checks.
-- [ ] Database migration, backup/restore/export/import tests.
-- [ ] Startup, sleep/resume, notification, multi-monitor, high-DPI tests.
-- [ ] Installer/upgrade readiness.
+### Phase 6 — Hardening (completed in 1.8.0)
+- [x] CPU/RAM profiling per module; memory-leak checks.
+- [x] Database migration, backup/restore/export-import tests (export/import as one ZIP).
+- [x] Startup, sleep/resume, clock-change, display-change, high-DPI tests.
+- [x] Installer/upgrade readiness (icon, metadata, portable ZIP, Inno Setup script).
 
 ---
 
-## 14. Acceptance criteria tracking
+## 15. Acceptance criteria tracking
 
 From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5):
 
@@ -684,10 +796,10 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 15 | Screen-break reminders function | ✔ Tested (interval scheduler, toast, Remind now, persisted settings, restart) |
 | 16 | Module settings persist | ✔ Tested (module state plus `ConfigJson` screen-break settings across restart) |
 | 17 | Disabled modules preserve data | ✔ Tested |
-| 18 | Backup and restore work | ◻ Pending (Phase 6) |
+| 18 | Backup and restore work | ✔ Tested (ZIP create/inspect/stage, restart apply, safety copy, rollback path) |
 | 19 | No mandatory internet access | ✔ Tested (no network code) |
 | 20 | No unnecessary background processes | ✔ Tested (single process) |
-| 21 | CPU and memory measured | ✔ Baseline recorded (§11); full profiling Phase 6 |
+| 21 | CPU and memory measured | ✔ Tested (idle 0.016 CPU s / 98.9 MB private; ~650-popup stress plateau with flat handles/GDI) |
 | 22 | Launcher functionality not broken | ✔ Tested |
 | 23 | Dashboard aggregates daily focus, tasks, habits, medication, health | ✔ Tested (snapshot + six widgets after restart) |
 | 24 | Calendar aggregates tasks, reminders, medication and focus | ✔ Tested (month grid, agenda, quick add) |
@@ -697,7 +809,7 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 
 ---
 
-## 15. Test method notes
+## 16. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -751,6 +863,21 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   balloon/toast notifications were suppressed by the environment; `tools/watch-toast.ps1`
   captures the card and can click it.
 - Helper scripts in `tools/`: `ui.ps1` (list/shot/elements/invoke/set/click/clickxy/keys),
-  `watch-toast.ps1` (toast capture/click), `close-dock.ps1` (clean shutdown between runs).
+  `watch-toast.ps1` (toast capture/click), `close-dock.ps1` (clean shutdown between runs),
+  `measure.ps1` (CPU/RAM/handle sample), `stress-ui.ps1` (repeat open/close with leak
+  metrics), `publish.ps1` (release/portable ZIP/installer) and `make-icon.ps1`.
+- Phase 6 backup/restore tests used the real dialogs: `CreateBackupButton` →
+  `SendKeys` path + Enter, `RestoreBackupButton` → path + Enter → message-box Enter. The
+  archive was re-opened with Python `zipfile`/`sqlite3` to check entries, journal mode,
+  `user_version`, `integrity_check` and row counts. Restore was proven by adding a note,
+  restoring, and confirming the post-restart process ID, note count, safety copy folder
+  and log lines.
+- Migration was tested with a real v1 fixture (current database with `BreathingSessions`
+  dropped, `SnoozeUntilUtc` removed and `user_version=1`), placed at the live path while
+  the app was stopped; the log and resulting schema were checked after startup and the
+  original database restored afterwards.
+- Sleep/resume, clock and display changes were simulated by `PostMessage` to the dock
+  HWND (`0x0218/0x0012`, `0x001E`, `0x007E`) and verified through log lines and an
+  unchanged `GetWindowRect` reservation.
 - The temporary Smoke Test module used for end-to-end validation was deleted before
   release, along with its `ModuleSettings` row.
