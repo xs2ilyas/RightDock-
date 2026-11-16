@@ -41,6 +41,26 @@ namespace RightDock.Modules
             _store = new ModuleStateStore(database);
             _savedStates = _store.LoadAll();
             _context = new ModuleContext(settings, database, scheduler, notifications);
+            _context.OpenExpanded = moduleId =>
+            {
+                ModuleEntry entry = Find(moduleId);
+                if (entry != null) OpenExpanded(entry);
+            };
+            _context.RefreshModule = moduleId =>
+            {
+                ModuleEntry entry = Find(moduleId);
+                if (entry != null && entry.Initialized)
+                {
+                    try
+                    {
+                        entry.Module.Activate();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error("Module refresh failed: " + moduleId, ex);
+                    }
+                }
+            };
             _popups = new PopupHost();
             _popups.OpenCountChanged += count => PopupCountChanged?.Invoke(count);
         }

@@ -1,7 +1,8 @@
 # RightDock — Implementation Progress
 
-> Release **1.3.0** — launcher + Phase 1 productivity infrastructure complete.
-> Next up: **Phase 2** (Focus, Tasks, Reminders, Notes).
+> Release **1.4.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> (Focus, Tasks, Reminders, Notes) complete.
+> Next up: **Phase 3** (Habits, Medication, Health & Lifestyle).
 > Last updated: 2026-11-16.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -17,8 +18,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.1.0 | Auto-hide + edge reveal, 181-icon line set, icon picker | ✔ Done ✔ Tested |
 | v1.2.0 | Settings popup (auto-hide, icon color, startup) | ✔ Done ✔ Tested |
 | v1.3.0 | Phase 1: Module manager, popup host, SQLite, scheduler, notifications, settings integration | ✔ Done ✔ Tested |
+| v1.4.0 | Phase 2: Focus, Tasks, Reminders, Quick Ideas / Notes | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
-| Phase 2 | Focus, Tasks, Reminders, Quick Ideas / Notes | ◻ Pending |
 | Phase 3 | Habits, Medication, Health & Lifestyle | ◻ Pending |
 | Phase 4 | Dashboard, Daily Overview, Notes, Calendar, Statistics | ◻ Pending |
 | Phase 5 | Breathing, Screen-break, Learning tracker | ◻ Pending |
@@ -170,7 +171,87 @@ custom swatch selected; settings were then restored to defaults for the user.
 
 ---
 
-## 6. Documentation and repository (completed)
+## 6. v1.4.0 — Phase 2 productivity modules (completed, tested)
+
+Four modules are registered in `App.OnStartup` before `ModuleManager.Start()`, so they
+appear in the dock and Modules settings with their data loaded from SQLite.
+
+### Focus (`Modules/Focus`)
+- Presets 15/25/45/60 minutes; 38 px clock, progress bar, READY/FOCUSING/PAUSED state.
+- Start inserts a `FocusSessions` row; Pause accumulates wall-clock segments; Resume;
+  Reset discards the in-flight row; completion finalizes planned/actual seconds with
+  `IsCompleted=1` and posts a "Focus session complete" toast that opens the dashboard.
+- Compact: today's minutes, session count, presets, primary action, recent sessions.
+- Expanded: 7-day bars, session history with task/duration/completion, and a task link
+  (active tasks from `TaskStore`; locked while running; "No task" option).
+- Stale open sessions are finalized on activation; deactivation finalizes an in-flight
+  session as ended early, so a crash/restart cannot leave a stuck timer.
+
+### Tasks (`Modules/Tasks`)
+- Full CRUD with title, due date/time, category, project, priority (Low/Normal/High),
+  recurrence (once/daily/weekly/monthly) and notes.
+- Due parser accepts `14:30`, `11/20 09:00`, `2026-11-20 09:00`, date-only (17:00) and
+  rolls a past time-only value to tomorrow; invalid input shows inline red text.
+- Views Today / Upcoming / Completed / All plus case-insensitive search across
+  title/notes/category/project; compact shows today's tasks and quick add on Enter.
+- Completing a recurring task marks the row completed and inserts the next occurrence;
+  rows show due/overdue state, priority dot, recurrence and category/project metadata.
+
+### Reminders (`Modules/Reminders`)
+- One-time, daily, weekly and `custom:<days>` recurrence; notes; quick add (+1 h).
+- Snooze 5/10/30/60 minutes; complete; active/history views.
+- One scheduler key per active reminder, rebuilt on activation and every mutation;
+  firing shows a toast (`Reminder · <title>` + due/notes) that opens the dashboard.
+- Recurring reminders create their next occurrence on completion; overdue reminders fire
+  once shortly after startup; all schedules survive restart.
+
+### Notes (`Modules/Notes`)
+- Quick capture (Ctrl+Enter), title derived from the first line, pin/unpin, category and
+  search; "Pinned" marker and updated time in lists.
+- "Create task" inserts a task (no due date, normal priority); "Create reminder" inserts
+  a reminder due in one hour. Both refresh the target module immediately so its lists
+  and scheduler pick up the new row.
+- Expanded editor body was reduced to 150 px so Save/Delete and the Convert section are
+  visible without scrolling at 980×680.
+
+### Shared UI work
+- `Modules/ModuleTheme.xaml`: shared dark styles (cards, section titles, inputs, primary/
+  secondary/ghost/danger buttons, chips, round check, divider, progress).
+- `Modules/ModuleUtil.cs`: formatting (`Today 11:44`, `Fri 09:00`), clock/duration text,
+  due-date parsing, recurrence labels and next-occurrence math.
+- Popup chrome, Settings and Icon Picker backgrounds changed from 96 % to fully opaque
+  (`#FF242424`) to remove faint bleed-through over bright windows.
+- Text inputs got automation ids (`TaskQuickAdd`, `TaskTitle`, `TaskDue`, `NoteCapture`,
+  `ReminderDue`, …) for reliable UI-automation testing and accessibility.
+- Reworded Focus completion to "1 minute"/"N minutes"; Tasks repeat chips moved to a
+  full-width row so **Monthly** no longer wraps.
+
+### Verified on a live Windows 11 session
+- **Focus:** start → FOCUSING; pause froze the clock and showed Resume; resume continued;
+  reset returned to READY and removed the session row. A completed 1-minute session (test
+  preset, reverted afterwards) produced the toast, a `FocusSessions` row with 60/60 s and
+  `IsCompleted=1`, today's bar/total and a history row tied to the linked "Weekly review"
+  task. Task chips locked while running.
+- **Tasks:** quick add persisted; editor saved due 14:30, category, project, notes,
+  High priority and Daily recurrence (verified in SQLite and list metadata); completing it
+  created tomorrow's row and Completed view retained the original; search filtered by
+  notes; Today/Upcoming/Completed/All and the new full-width repeat row rendered correctly.
+- **Reminders:** quick add created a +1 h reminder; editing to a near-future due fired the
+  toast at the exact minute; clicking the toast opened the expanded view; snooze stored
+  `SnoozeUntilUtc` (+5 min), showed "Snoozed · Today 11:44" and fired again on time;
+  completion moved the row to History ("Completed Today 11:44 · Daily") and inserted the
+  next daily occurrence; custom 3-day recurrence saved as `custom:3`; changing a due time
+  and restarting the app still fired at the scheduled minute (startup reschedule works).
+- **Notes:** body-only capture, derived title, category + pin persisted; conversions
+  created Task and Reminder rows; reminder conversion showed "Reminder set for …"; search
+  filtered; the 150 px editor shows Convert buttons without scrolling.
+- **Integration:** modules list in Settings → Modules with descriptions and Hide links;
+  dock icons open the compact popups; restart preserved tasks, reminders, notes, focus
+  history and module visibility; single process; no errors in `rightdock.log`.
+
+---
+
+## 7. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -180,29 +261,30 @@ custom swatch selected; settings were then restored to defaults for the user.
 
 ---
 
-## 7. Measured resource baseline
+## 8. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
-visible, Phase 1 services active, 30 s idle sample):
+visible, all four Phase 2 modules registered, no popups open, 30 s idle sample):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | ≈99 MB |
-| Private bytes | ≈59 MB |
-| Idle CPU | 0.02 s over 30 s → ≈0.05 % of one core |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); animation timer only during slides |
+| Working set | ≈123 MB |
+| Private bytes | ≈71 MB |
+| Idle CPU | 0 CPU seconds over 30 s → 0 % |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; animation timer only during slides |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
 
-The launcher-only 1.2.0 baseline was ≈76 MB working set / ≈58 MB private / ≈0.22 %
-average CPU; Phase 1 adds ≈23 MB working set while keeping private bytes flat.
-Phase 6 will repeat this with profiling tools, memory-leak checks, and idle-vs-active
-comparisons per module.
+Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB private /
+≈0.22 % average CPU; 1.3.0 Phase 1 ≈99 MB / ≈59 MB / ≈0.05 %; 1.4.0 Phase 2
+≈123 MB / ≈71 MB / 0 %. The step from 1.3.0 is the four module WPF views (loaded on
+first open) plus module stores; idle CPU stays at zero. Phase 6 will repeat this with
+profiling tools, memory-leak checks, and idle-vs-active comparisons per module.
 
 ---
 
-## 8. Known limitations (current release)
+## 9. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -218,21 +300,30 @@ comparisons per module.
   outside path data).
 - **Startup entry is static** — if the exe is moved, the Run value must be re-toggled.
 - **No installer or code signing** — distributed as a `publish` folder.
-- **No product modules in 1.3.0** — the module infrastructure ships empty (the Modules
-  page shows "No modules are registered yet."); Focus, Tasks, Reminders and Notes arrive
-  in Phase 2.
+- **Recurrence is preset-based** — tasks support none/daily/weekly/monthly and reminders
+  support one-time/daily/weekly/custom-N-days; there is no full RRULE engine (no "every
+  weekday", "last Friday", or end-date rules yet).
+- **Due dates are parsed from text** — accepted formats include `today`, `tomorrow`,
+  `yyyy-MM-dd`, `HH:mm`, and combinations; there is no calendar-picker control yet.
+- **Focus timing is wall-clock** — sessions keep running through sleep/idle; there is no
+  idle detection or auto-pause, and pausing records segments that are finalised on
+  resume/stop.
+- **No drag reordering** — tasks and reminders are listed by their sort fields; manual
+  ordering is not implemented.
 - **Notifications are in-app cards only** — they stack above the desktop but are not sent
-  to the Windows Action Center, and quiet hours/snooze are not implemented yet.
-- **Scheduler intervals are fixed** — recurrence rules, snooze and per-item timezones are
-  module-level concerns for later phases.
+  to the Windows Action Center, and quiet hours/snooze are not implemented yet (reminder
+  snooze is module-level).
 - **Module settings page is reserved** — `CreateSettingsView()` exists on the contract but
-  no generic host for module-specific settings exists yet.
+  no generic host for module-specific settings exists yet; module options currently live
+  in each expanded view.
 - **Settings window is fixed-size** (500×520, five tabs); future categories will require
   a scrollable layout.
+- **No backup/restore/export/import** — the SQLite file can be copied manually while the
+  app is closed; first-class data tools arrive in Phase 6.
 
 ---
 
-## 9. Pending roadmap
+## 10. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -246,12 +337,12 @@ comparisons per module.
 - [x] Compact/expanded popup shell, toggle behavior and expanded persistence validated
       with a temporary module (removed before release).
 
-### Phase 2 — Productivity modules
-- [ ] Focus: presets, start/pause/resume/reset, session history, daily stats, task link.
-- [ ] Tasks: CRUD, priority, due date/time, categories, projects, recurring, search,
+### Phase 2 — Productivity modules (completed in 1.4.0)
+- [x] Focus: presets, start/pause/resume/reset, session history, daily stats, task link.
+- [x] Tasks: CRUD, priority, due date/time, categories, projects, recurring, search,
       Today/Upcoming/Completed views.
-- [ ] Reminders: one-time/daily/weekly/custom recurrence, snooze, complete, history.
-- [ ] Quick Ideas / Notes: capture, pin, search, convert to task/reminder.
+- [x] Reminders: one-time/daily/weekly/custom recurrence, snooze, complete, history.
+- [x] Quick Ideas / Notes: capture, pin, search, convert to task/reminder.
 
 ### Phase 3 — Personal tracking
 - [ ] Habits: boolean/counter/duration, 10 seeded habits + custom, daily/weekly history,
@@ -282,7 +373,7 @@ comparisons per module.
 
 ---
 
-## 10. Acceptance criteria tracking
+## 11. Acceptance criteria tracking
 
 From the master specification §11:
 
@@ -291,44 +382,57 @@ From the master specification §11:
 | 1 | Existing application launching unchanged | ✔ Tested |
 | 2 | Existing custom icons still work | ✔ Tested |
 | 3 | Dock approximately 50 px wide | ✔ Tested |
-| 4 | Productivity modules open as compact popups | ✔ Tested (infrastructure via temporary module) |
-| 5 | Expanded workspace works | ✔ Tested (980×680 shell; content arrives in Phase 2) |
-| 6 | Compact and expanded views share data | ◻ Pending (no product module yet) |
-| 7 | Tasks persist after restart | ◻ Pending |
-| 8 | Reminders work correctly | ◻ Pending |
-| 9 | Recurring schedules work | ◻ Pending |
-| 10 | Focus sessions record accurate durations | ◻ Pending |
-| 11 | Habits retain daily/weekly history | ◻ Pending |
-| 12 | Medication schedules and intake logs separate | ◻ Pending |
-| 13 | Quick Ideas / Notes saves information | ◻ Pending |
-| 14 | Breathing sessions function | ◻ Pending |
-| 15 | Screen-break reminders function | ◻ Pending |
+| 4 | Productivity modules open as compact popups | ✔ Tested (Focus, Tasks, Reminders, Notes at 320 DIP) |
+| 5 | Expanded workspace works | ✔ Tested (980×680 dashboard per module) |
+| 6 | Compact and expanded views share data | ✔ Tested (both views over one store, rebuilt on change) |
+| 7 | Tasks persist after restart | ✔ Tested |
+| 8 | Reminders work correctly | ✔ Tested (fire, toast, snooze, complete, overdue on startup) |
+| 9 | Recurring schedules work | ✔ Tested (daily/weekly/monthly tasks, daily/weekly/custom-N reminders) |
+| 10 | Focus sessions record accurate durations | ✔ Tested (planned vs actual seconds, pause segments) |
+| 11 | Habits retain daily/weekly history | ◻ Pending (Phase 3) |
+| 12 | Medication schedules and intake logs separate | ◻ Pending (Phase 3) |
+| 13 | Quick Ideas / Notes saves information | ✔ Tested (capture, pin, search, convert) |
+| 14 | Breathing sessions function | ◻ Pending (Phase 5) |
+| 15 | Screen-break reminders function | ◻ Pending (Phase 5) |
 | 16 | Module settings persist | ✔ Tested |
 | 17 | Disabled modules preserve data | ✔ Tested |
-| 18 | Backup and restore work | ◻ Pending |
+| 18 | Backup and restore work | ◻ Pending (Phase 6) |
 | 19 | No mandatory internet access | ✔ Tested (no network code) |
 | 20 | No unnecessary background processes | ✔ Tested (single process) |
-| 21 | CPU and memory measured | ✔ Baseline recorded (§6); full profiling Phase 6 |
+| 21 | CPU and memory measured | ✔ Baseline recorded (§8); full profiling Phase 6 |
 | 22 | Launcher functionality not broken | ✔ Tested |
 
 ---
 
-## 11. Test method notes
+## 12. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
   the dock's UIA tree, so window-scoped searches must attach directly to the HWND
-  (`AutomationElement.FromHandle`). Tab buttons expose `AutomationId`s
-  (`TabModules`, `TabNotifications`); module toggles use `TogglePattern`, links and
-  buttons use `InvokePattern`.
+  (`AutomationElement.FromHandle`). Tab buttons and module inputs expose `AutomationId`s
+  (`TabModules`, `TabNotifications`, `TaskTitle`, `TaskDue`, `TaskSearch`, `ReminderTitle`,
+  `ReminderDue`, `ReminderCustomDays`, `NoteTitle`, `NoteBody`, `NoteCapture`, …); module
+  toggles use `TogglePattern`, links and buttons use `InvokePattern`.
+- **WPF text boxes surface as `ControlType.Edit`** in UIA, not "TextBox"; filter on
+  ControlType.Edit when dumping elements, and prefer `ValuePattern` for typing.
+- **`TogglePattern.Toggle()` is not a real click** — it flips `IsChecked` visually but
+  does not raise WPF `Click`, so handlers (priority/repeat/filter chips, round
+  checkboxes) do not run. Use real mouse clicks (`SetCursorPos` + `mouse_event`) or
+  `InvokePattern` where applicable.
+- **The dock must be revealed before clicking** — hover the right edge, wait for the
+  slide-in, then compute points from `GetWindowRect`.
 - Geometry verified through Win32 (`GetWindowRect`, `SystemParameters.WorkArea`) rather
   than visual estimates. Note that non-DPI-aware processes receive virtualized
   coordinates (125 % scaling → 80 % values), so UIA queries must set `SetProcessDPIAware`
   before computing click points.
 - Persistence verified by closing/restarting the app and re-reading `pins.json`,
-  `settings.json`, the Run registry value, and `ModuleSettings` directly from
-  `rightdock.db`.
-- Notifications were verified with timed DPI-aware screen captures because shell
-  balloon/toast notifications were suppressed by the environment.
+  `settings.json`, the Run registry value, and the Phase 2 tables (`Tasks`, `Reminders`,
+  `Notes`, `FocusSessions`) directly from `rightdock.db`.
+- Notifications were verified with timed DPI-aware screen captures and a watcher that
+  polls for visible topmost windows (titleless, 200–700 × 40–400 DIP) because shell
+  balloon/toast notifications were suppressed by the environment; `tools/watch-toast.ps1`
+  captures the card and can click it.
+- Helper scripts in `tools/`: `ui.ps1` (list/shot/elements/invoke/set/click/clickxy/keys),
+  `watch-toast.ps1` (toast capture/click), `close-dock.ps1` (clean shutdown between runs).
 - The temporary Smoke Test module used for end-to-end validation was deleted before
   release, along with its `ModuleSettings` row.

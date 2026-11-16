@@ -1,3 +1,4 @@
+using System;
 using RightDock.Data;
 using RightDock.Services;
 
@@ -22,12 +23,16 @@ namespace RightDock.Modules
 
         internal NotificationService Notifications { get; }
 
+        internal Action<string> OpenExpanded { get; set; }
+
+        internal Action<string> RefreshModule { get; set; }
+
         internal void LogInfo(string message)
         {
             Log.Info("[module] " + message);
         }
 
-        internal void LogError(string message, System.Exception exception = null)
+        internal void LogError(string message, Exception exception = null)
         {
             Log.Error("[module] " + message, exception);
         }

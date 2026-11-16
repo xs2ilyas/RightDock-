@@ -7,13 +7,92 @@ semantic versioning. Development is organized in phases (see
 
 ## [Unreleased]
 
-### Added
-- `PROJECT_ARCHITECTURE.md`, `IMPLEMENTATION_PROGRESS.md`, `CHANGELOG.md`.
-- Git repository with `.gitignore` (build outputs excluded) published to
-  `https://github.com/xs2ilyas/RightDock-.git`.
-
 ### Planned
-- Phase 2 productivity modules: Focus, Tasks, Reminders, Quick Ideas / Notes.
+- Phase 3 personal tracking: Habits, Medication, Health & Lifestyle.
+
+Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
+picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.4.0] — 2026-11-16 — Phase 2 productivity modules
+
+### Added
+- **Focus module** (`Modules/Focus/`) — 15/25/45/60-minute presets plus a custom
+  minutes field, start/pause/resume/reset, wall-clock timing with persisted segments,
+  optional task link, completion notification, today's total and a 7-day bar strip,
+  session history (Today / This week / All time), and `FocusStore` over
+  `FocusSessions` (`PlannedSeconds`, `ActualSeconds`, `IsCompleted`, `TaskId`).
+- **Tasks module** (`Modules/Tasks/`) — quick add, full editor (title, due date/time,
+  priority low/normal/high, category, project, notes, repeat none/daily/weekly/monthly),
+  search, Today/Upcoming/Completed filters, per-row complete with automatic
+  rescheduling of the next occurrence, delete, and `TaskStore` over `Tasks`/`Projects`.
+- **Reminders module** (`Modules/Reminders/`) — quick add, editor (title, due, notes,
+  repeat one-time/daily/weekly/custom-N-days), scheduler integration with keys
+  `reminder:<id>:<due-ticks>`, toast notification with click-to-open, snooze 5/10/15
+  minutes, complete with next-occurrence creation, overdue catch-up on startup, active
+  and history lists, and `ReminderStore` over `Reminders`.
+- **Quick Ideas / Notes module** (`Modules/Notes/`) — instant capture from the compact
+  popup, pinned notes first, search, edit/delete, and one-click conversion into a task
+  or a reminder (creates the row, then refreshes the target module), plus `NoteStore`
+  over `Notes`.
+- **Shared module UI kit** (`Modules/ModuleTheme.xaml`, merged into `App.xaml`) — dark
+  section titles, text inputs, chips, round checkboxes, pill filters, list rows, primary
+  buttons, card surfaces, scrollbar styling.
+- **`ModuleUtil`** — relative-due parsing (`today`, `tomorrow`, `yyyy-MM-dd`, `HH:mm`,
+  combinations), friendly date formatting, and duration/priority helpers shared by the
+  modules.
+- `ModuleContext.OpenExpanded(moduleId)` and `ModuleContext.RefreshModule(moduleId)` so a
+  module (e.g. Notes) can open or refresh another module after cross-module actions.
+- Compact/expanded view pairs for all four modules, each with matching automation IDs
+  for testability (`TaskTitle`, `TaskDue`, `TaskSearch`, `ReminderTitle`,
+  `ReminderDue`, `ReminderCustomDays`, `NoteTitle`, `NoteBody`, `NoteCapture`, …).
+- Test helpers `tools/ui.ps1`, `tools/watch-toast.ps1`, `tools/close-dock.ps1`.
+
+### Changed
+- Modules are registered in `DockServices`; Focus, Tasks, Reminders and Notes appear in
+  the dock by default and can be hidden or disabled from Settings → Modules.
+- Module popup chrome, Settings and the icon picker now use a fully opaque `#FF242424`
+  background (was `#F4242424`) to remove faint bleed-through over bright windows.
+- `ModulePopupWindow` hosts module `UserControl` views; compact windows stay at 320 DIP,
+  expanded at 980×680.
+- Version 1.4.0.
+
+### Fixed
+- Focus completion toast said "You finished 1 minutes" — added singular/plural wording.
+- Reminder "Complete" in the list now reliably advances recurring reminders (the UIA
+  toggle artifact aside, the click path writes `IsCompleted` and inserts the next row).
+
+### Verified
+- Reminder round-trip: quick add → fired at the exact minute → toast "Reminder · Drink
+  water / Due Today 11:39" → click opened the dashboard → snooze 5 min (DB, "Snoozed ·
+  Today 11:44", refire) → complete on a daily rule completed the old row and created the
+  next day's row → history showed "1 completed" → custom-N-days rule rescheduled.
+- Restart reconciliation: a reminder due after a restart fired at its due time; an
+  overdue reminder fired immediately on launch (expected).
+- Focus: linked a task, ran a 1-minute session to completion (temporary preset), saw
+  FOCUSING state with locked preset/task chips, progress, completion toast, DB row with
+  `PlannedSeconds=60`, `ActualSeconds=60`, `IsCompleted=1`, `TaskId` set, 7-day total and
+  history entry; presets restored to 15/25/45/60 in the shipped build.
+- Tasks: created via the expanded editor using UIA `ValuePattern` + real chip clicks →
+  DB `Priority=3`, `RecurrenceRule='monthly'`, due `2026-11-18T05:00Z`; completing a
+  daily task created the next occurrence.
+- Notes: capture, pin, search, and convert-to-task/reminder confirmed in the UI and the
+  `Tasks`/`Reminders` tables.
+- Persistence across restarts for tasks, reminders (including next occurrences), notes,
+  focus history and module visibility; single process; Settings → Modules lists the four
+  modules with enable toggles and Hide/Show links.
+- Idle baseline on the shipped 1.4.0 build: ≈123 MB working set, ≈71 MB private bytes,
+  0 CPU seconds over 30 s.
+
+### Files
+- Added: `Data/FocusStore.cs`, `Data/TaskStore.cs`, `Data/ReminderStore.cs`,
+  `Data/NoteStore.cs`, `Modules/ModuleTheme.xaml`, `Modules/ModuleUtil.cs`,
+  `Modules/Focus/*`, `Modules/Tasks/*`, `Modules/Reminders/*`, `Modules/Notes/*`,
+  `tools/ui.ps1`, `tools/watch-toast.ps1`, `tools/close-dock.ps1`.
+- Modified: `App.xaml`, `App.xaml.cs`, `RightDock.csproj`, `Modules/ModuleContext.cs`,
+  `Modules/ModuleManager.cs`, `Modules/ModulePopupWindow.xaml`, `SettingsWindow.xaml`,
+  `IconPickerWindow.xaml`.
 
 ---
 

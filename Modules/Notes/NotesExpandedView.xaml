@@ -1,0 +1,105 @@
+<UserControl x:Class="RightDock.Modules.Notes.NotesExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="440"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel>
+            <Grid Margin="1,0,0,6">
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTES" Margin="0"/>
+                <Button Style="{StaticResource MdGhostButton}" Content="+ New note"
+                        FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Click="New_Click"/>
+            </Grid>
+
+            <TextBox x:Name="SearchBox" Style="{StaticResource MdInput}" TextChanged="Search_TextChanged"
+                     AutomationProperties.AutomationId="NoteSearch"/>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,6,0,4"/>
+
+            <ScrollViewer MaxHeight="500" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="NotePanel"/>
+            </ScrollViewer>
+
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                       Text="No notes yet."/>
+        </StackPanel>
+
+        <Border Grid.Column="1" Style="{StaticResource MdCard}" Margin="16,0,0,0" Padding="18">
+            <StackPanel>
+                <Grid Margin="0,0,0,12">
+                    <TextBlock x:Name="EditorTitle" Style="{StaticResource MdTitle}" Text="New note"/>
+                    <TextBlock x:Name="StatusText" FontSize="10.5" Foreground="#9CC7E9"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TITLE"/>
+                <TextBox x:Name="TitleInput" Style="{StaticResource MdInput}" TextChanged="Editor_TextChanged"
+                         AutomationProperties.AutomationId="NoteTitle"/>
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="CATEGORY"/>
+                        <TextBox x:Name="CategoryInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="NoteCategory"/>
+                    </StackPanel>
+
+                    <ToggleButton x:Name="PinChip" Grid.Column="1" Style="{StaticResource MdChip}"
+                                  Content="Pin note" Margin="10,17,0,0" VerticalAlignment="Top"
+                                  Click="Pin_Click"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTE" Margin="1,12,0,6"/>
+                <TextBox x:Name="BodyInput" Style="{StaticResource MdInput}" Height="150"
+                         AutomationProperties.AutomationId="NoteBody"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto" TextChanged="Editor_TextChanged"/>
+
+                <TextBlock x:Name="ErrorText" Foreground="#FF9A9A" FontSize="11" Margin="1,8,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Style="{StaticResource MdPrimaryButton}" Content="Save note"
+                            Click="Save_Click"/>
+                    <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Clear"
+                            Margin="8,0,0,0" HorizontalAlignment="Left" Click="Clear_Click"/>
+                    <Button x:Name="DeleteButton" Grid.Column="2" Style="{StaticResource MdDangerButton}"
+                            Content="Delete" IsEnabled="False" Click="Delete_Click"/>
+                </Grid>
+
+                <Border Style="{StaticResource MdDivider}"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="CONVERT"/>
+                <TextBlock Style="{StaticResource MdCaption}" Margin="0,0,0,8"
+                           Text="Save the note first, then send it to Tasks or Reminders."/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="ToTaskButton" Style="{StaticResource MdSecondaryButton}"
+                            Content="Create task" IsEnabled="False" Click="ToTask_Click"/>
+                    <Button x:Name="ToReminderButton" Style="{StaticResource MdSecondaryButton}"
+                            Content="Create reminder" IsEnabled="False" Margin="8,0,0,0"
+                            Click="ToReminder_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

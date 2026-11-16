@@ -37,7 +37,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="12" CornerRadius="14" Background="#F4242424"
+    <Border Margin="12" CornerRadius="14" Background="#FF242424"
             BorderBrush="#2EFFFFFF" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="5" Opacity="0.45" Color="#000000"/>

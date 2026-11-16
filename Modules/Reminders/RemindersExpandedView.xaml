@@ -1,0 +1,107 @@
+<UserControl x:Class="RightDock.Modules.Reminders.RemindersExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="440"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel>
+            <Grid Margin="1,0,0,6">
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="REMINDER LIST" Margin="0"/>
+                <Button Style="{StaticResource MdGhostButton}" Content="+ New reminder"
+                        FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Click="New_Click"/>
+            </Grid>
+
+            <WrapPanel>
+                <ToggleButton x:Name="ViewActive" Style="{StaticResource MdChip}" Content="Active"
+                              Tag="active" Click="View_Click"/>
+                <ToggleButton x:Name="ViewHistory" Style="{StaticResource MdChip}" Content="History"
+                              Tag="history" Click="View_Click"/>
+            </WrapPanel>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,4,0,4"/>
+
+            <ScrollViewer MaxHeight="500" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="ReminderPanel"/>
+            </ScrollViewer>
+
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                       Text="No active reminders."/>
+        </StackPanel>
+
+        <Border Grid.Column="1" Style="{StaticResource MdCard}" Margin="16,0,0,0" Padding="18">
+            <StackPanel>
+                <Grid Margin="0,0,0,12">
+                    <TextBlock x:Name="EditorTitle" Style="{StaticResource MdTitle}" Text="New reminder"/>
+                    <TextBlock x:Name="StatusText" FontSize="10.5" Foreground="#9CC7E9"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TITLE"/>
+                <TextBox x:Name="TitleInput" Style="{StaticResource MdInput}" TextChanged="Editor_TextChanged"
+                         AutomationProperties.AutomationId="ReminderTitle"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="DUE" Margin="1,12,0,6"/>
+                <TextBox x:Name="DueInput" Style="{StaticResource MdInput}"
+                         AutomationProperties.AutomationId="ReminderDue"/>
+                <TextBlock Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                           Text="Examples: 14:30, 2026-11-20 09:00, 11/20 18:00."/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="REPEAT" Margin="1,12,0,6"/>
+                <WrapPanel>
+                    <ToggleButton x:Name="RepeatNone" Style="{StaticResource MdChip}" Content="Once"
+                                  Tag="none" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatDaily" Style="{StaticResource MdChip}" Content="Daily"
+                                  Tag="daily" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatWeekly" Style="{StaticResource MdChip}" Content="Weekly"
+                                  Tag="weekly" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatCustom" Style="{StaticResource MdChip}" Content="Custom"
+                                  Tag="custom" Click="Repeat_Click"/>
+                </WrapPanel>
+
+                <StackPanel x:Name="CustomDaysPanel" Orientation="Horizontal" Margin="1,4,0,0"
+                            Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource MdCaption}" Text="Every" VerticalAlignment="Center"
+                               Margin="0,0,6,0"/>
+                    <TextBox x:Name="CustomDaysInput" Style="{StaticResource MdInput}" Width="54"
+                             Text="3" VerticalContentAlignment="Center"
+                             AutomationProperties.AutomationId="ReminderCustomDays"/>
+                    <TextBlock Style="{StaticResource MdCaption}" Text="days" VerticalAlignment="Center"
+                               Margin="6,0,0,0"/>
+                </StackPanel>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTES" Margin="1,12,0,6"/>
+                <TextBox x:Name="NotesInput" Style="{StaticResource MdInput}" Height="96"
+                         AutomationProperties.AutomationId="ReminderNotes"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto"/>
+
+                <TextBlock x:Name="ErrorText" Foreground="#FF9A9A" FontSize="11" Margin="1,8,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button Style="{StaticResource MdPrimaryButton}" Content="Save reminder"
+                            Click="Save_Click"/>
+                    <Button Grid.Column="1" Style="{StaticResource MdSecondaryButton}" Content="Clear"
+                            Margin="8,0,0,0" HorizontalAlignment="Left" Click="Clear_Click"/>
+                    <Button x:Name="DeleteButton" Grid.Column="2" Style="{StaticResource MdDangerButton}"
+                            Content="Delete" IsEnabled="False" Click="Delete_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

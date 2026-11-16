@@ -1,6 +1,10 @@
 using System;
 using System.Threading;
 using System.Windows;
+using RightDock.Modules.Focus;
+using RightDock.Modules.Notes;
+using RightDock.Modules.Reminders;
+using RightDock.Modules.Tasks;
 using RightDock.Services;
 
 namespace RightDock
@@ -24,6 +28,10 @@ namespace RightDock
             try
             {
                 _services = new DockServices();
+                _services.Modules.Register(new FocusModule());
+                _services.Modules.Register(new TasksModule());
+                _services.Modules.Register(new RemindersModule());
+                _services.Modules.Register(new NotesModule());
                 _services.Start();
             }
             catch (Exception ex)

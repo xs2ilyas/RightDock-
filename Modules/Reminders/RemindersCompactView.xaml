@@ -1,0 +1,36 @@
+<UserControl x:Class="RightDock.Modules.Reminders.RemindersCompactView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <StackPanel>
+        <Grid Margin="0,0,0,7">
+            <TextBlock Style="{StaticResource MdSectionTitle}" Text="REMINDERS" Margin="1,0,0,0"/>
+            <TextBlock x:Name="CountText" Style="{StaticResource MdCaption}" HorizontalAlignment="Right"/>
+        </Grid>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="QuickAdd" Style="{StaticResource MdInput}" KeyDown="QuickAdd_KeyDown"
+                     AutomationProperties.AutomationId="ReminderQuickAdd" VerticalContentAlignment="Center"/>
+            <Button Grid.Column="1" Style="{StaticResource MdPrimaryButton}" Content="Add"
+                    Margin="6,0,0,0" Padding="13,6" Click="Add_Click"/>
+        </Grid>
+
+        <TextBlock Style="{StaticResource MdCaption}" Margin="1,5,0,0"
+                   Text="New reminders are due in one hour."/>
+
+        <StackPanel x:Name="ReminderPanel" Margin="0,10,0,0"/>
+        <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,2,0,0"
+                   Text="No active reminders."/>
+
+        <Button Style="{StaticResource MdGhostButton}" Content="Open dashboard"
+                FontSize="10.5" HorizontalAlignment="Right" Margin="0,10,0,0" Click="Open_Click"/>
+    </StackPanel>
+</UserControl>

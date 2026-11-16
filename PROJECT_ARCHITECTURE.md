@@ -1,14 +1,14 @@
 # RightDock — Project Architecture
 
-> Current release: **1.3.0** (launcher + Phase 1 productivity infrastructure)
+> Current release: **1.4.0** (launcher + Phase 1 infrastructure + Phase 2 productivity modules)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
 the right edge of the primary monitor. It reserves desktop work area through the Windows
 AppBar protocol, launches pinned applications, and supports a 181-glyph outlined icon
-system, auto-hide with edge reveal, a five-tab settings popup, and the Phase 1 foundation
-for productivity modules: SQLite persistence, a module manager with compact/expanded
-popups, a centralized scheduler, and in-app notification cards.
+system, auto-hide with edge reveal, a five-tab settings popup, and a productivity layer:
+SQLite persistence, a module manager with compact/expanded popups, a centralized
+scheduler, in-app notification cards, and the Focus, Tasks, Reminders and Notes modules.
 
 All functionality is implemented in one WPF process. No WebViews, Electron, separate
 module executables, background services, or third-party UI frameworks are used.
@@ -55,13 +55,23 @@ RightDock/
 ├─ SettingsWindow.xaml/.cs   Five-tab settings window (General, Appearance, Modules, Notifications, Startup)
 ├─ Data/
 │  ├─ Database.cs            SQLite connection, pragmas, versioned migrations, query helpers
-│  └─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config)
+│  ├─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config)
+│  ├─ FocusStore.cs          FocusSessions rows, recent activity, daily totals
+│  ├─ TaskStore.cs           Tasks CRUD, views, search, recurrence-insert on completion
+│  ├─ ReminderStore.cs       Reminders CRUD, snooze, completion, recurrence
+│  └─ NoteStore.cs           Notes CRUD, search, pin, timestamps
 ├─ Modules/
 │  ├─ IProductivityModule.cs Module contract + ProductivityModule base class
-│  ├─ ModuleContext.cs       Services handed to modules (settings, DB, scheduler, notifications)
+│  ├─ ModuleContext.cs       Services handed to modules + OpenExpanded/RefreshModule callbacks
 │  ├─ ModuleManager.cs       Registration, lifecycle, dock entries, enable/disable/visibility
+│  ├─ ModuleTheme.xaml       Shared dark styles: cards, inputs, chips, buttons, progress
+│  ├─ ModuleUtil.cs          Shared formatting, parsing and recurrence helpers
 │  ├─ PopupHost.cs           One compact + one expanded popup per module
-│  └─ ModulePopupWindow.xaml/.cs  Shared popup shell (title, icon, close, placement)
+│  ├─ ModulePopupWindow.xaml/.cs  Shared popup shell (title, icon, close, placement)
+│  ├─ Focus/                 FocusModule + compact/expanded timer views
+│  ├─ Tasks/                 TasksModule + compact/expanded list/editor views
+│  ├─ Reminders/             RemindersModule (scheduler integration) + views
+│  └─ Notes/                 NotesModule (capture + conversion) + views
 ├─ Services/
 │  ├─ Log.cs                 Append-only log under %APPDATA%\RightDock\logs
 │  ├─ Scheduler.cs           Central timestamp-based scheduler (one DispatcherTimer)
@@ -71,7 +81,10 @@ RightDock/
 ├─ RightDock.csproj          Build configuration
 ├─ tools/
 │  ├─ gen-icons.js           Generates IconCatalog.cs from Lucide data
-│  └─ lucide-icon-nodes.json Lucide source data (icon name → SVG nodes)
+│  ├─ lucide-icon-nodes.json Lucide source data (icon name → SVG nodes)
+│  ├─ ui.ps1                 UIA test helper: list/inspect/invoke/click/type/screenshot
+│  ├─ watch-toast.ps1        Polls for notification cards and can click them
+│  └─ close-dock.ps1         Graceful WM_CLOSE of the running dock
 ├─ PROJECT_ARCHITECTURE.md   This document
 ├─ IMPLEMENTATION_PROGRESS.md
 └─ CHANGELOG.md
@@ -310,8 +323,9 @@ settings changes; startup registration is the only registry state the app owns.
 
 - UI thread only; no worker threads or background services yet.
 - `DispatcherTimer`s: the 110 ms hover poll while running, a 16 ms animation timer that
-  exists only during a 170 ms slide, and the scheduler's single timer armed to the
-  earliest due timestamp (re-armed at most once per hour so sleep/resume is handled).
+  exists only during a 170 ms slide, the scheduler's single timer armed to the earliest
+  due timestamp (re-armed at most once per hour so sleep/resume is handled), and Focus's
+  1 s tick that runs only while a session is active.
 - SQLite access is synchronous and serialized behind one connection lock; operations are
   short and scoped to the UI thread. Callbacks from the scheduler run on the UI thread.
 - Notifications are owned by `NotificationService`: at most four `ToastWindow` cards are
@@ -320,8 +334,10 @@ settings changes; startup registration is the only registry state the app owns.
 - Brush and geometry objects are frozen and reused; pin visuals are rebuilt only when the
   pin list or icon color changes.
 - Measured baseline: launcher-only 1.2.0 was **~76 MB working set, ~58 MB private,
-  ≈0.2 % average CPU**; 1.3.0 with Phase 1 services idles at **~99 MB working set,
-  ~59 MB private, ≈0.05 % of one core** (Windows 11, 2560×1600 @125 %).
+  ≈0.2 % average CPU**; 1.3.0 with Phase 1 services idled at **~99 MB working set,
+  ~59 MB private, ≈0.05 % of one core**; 1.4.0 with all four Phase 2 modules initialized
+  idles at **~123 MB working set, ~71 MB private, 0 % CPU over 30 s**
+  (Windows 11, 2560×1600 @125 %).
 
 These constraints are the benchmark for every new module: reuse the process, avoid
 polling, prefer timestamp math over per-item timers, load UI on demand.
@@ -427,25 +443,69 @@ auto-dismiss, click runs the action and fades the card). In-app cards replace sh
 tray/balloon notifications, which are frequently suppressed by Focus Assist/DND and
 cannot be verified reliably. Settings → Notifications offers a live test button.
 
-### 11.7 Settings evolution
+### 11.7 Phase 2 modules (implemented in 1.4.0)
+
+All four modules follow the same pattern: a `ProductivityModule` subclass owns a store
+and an event (`Changed`), and exposes snapshot properties/commands to two XAML
+`UserControl` views. Views subscribe on `Loaded`, unsubscribe on `Unloaded`, guard
+programmatic updates with a `_syncing` flag, and rebuild lists only when a view key
+(count + first id + timestamp) changes. All UI uses `Modules/ModuleTheme.xaml` and
+`ModuleUtil` for parsing/formatting.
+
+| Module | Dock icon | Compact | Expanded | Persistence |
+| --- | --- | --- | --- | --- |
+| Focus | `lucide:timer` | Daily totals/session count, 15/25/45/60 presets, start/pause/resume/reset, recent sessions | 7-day chart, session history, task linking | `FocusSessions` |
+| Tasks | `lucide:clipboard-list` | Quick add (Enter), today's tasks, complete toggle | Views Today/Upcoming/Completed/All, search, full editor (due, category, project, priority, monthly/daily/weekly recurrence, notes) | `Tasks` |
+| Reminders | `lucide:bell` | Quick add (+1 h), complete, snooze menu | Active/History, one-time/daily/weekly/custom-N-days recurrence, snooze, notes | `Reminders` |
+| Notes | `lucide:notebook-pen` | Multiline capture (Ctrl+Enter), recent notes | Search, pin/unpin, category, convert to task/reminder | `Notes` |
+
+Key behaviors:
+
+- **Focus** runs on one shared 1 s `DispatcherTimer`, only while active. Elapsed time is
+  derived from wall-clock segments, so pausing accumulates accurately; starting inserts a
+  `FocusSessions` row and completion finalizes planned/actual seconds plus `IsCompleted`.
+  `Deactivate()` finalizes an in-flight session as not completed; stale sessions are
+  finalized on activation so a crash/restart cannot leave an open timer. Preset and linked
+  task are locked while running. Completion posts a toast that opens the expanded view.
+- **Tasks** complete-and-reschedule: when a recurring task is completed, the row is marked
+  completed and a new occurrence is inserted from the due date, so history is preserved.
+  Due dates are parsed from human-friendly input (`14:30`, `11/20 09:00`,
+  `2026-11-20 09:00`); a time-only value in the past rolls to tomorrow; date-only defaults
+  to 17:00. Search is a case-insensitive `LIKE` over title/notes/category/project.
+- **Reminders** registers one scheduler key per active reminder
+  (`reminder:<id>:<due-ticks>`) on `Activate()` and after every mutation, and cancels all
+  keys on `Deactivate()`. Firing shows a toast with the reminder title/notes and opens the
+  expanded view on click; recurring reminders only create their next occurrence on
+  completion (and snooze shifts only the current occurrence). Overdue reminders fire once
+  ~1 s after startup. Custom recurrence is stored as `custom:<days>`.
+- **Notes** supports body-only capture (title derived from the first line), pinning,
+  search, and one-way conversion: "Create task" inserts a `Tasks` row (no due date,
+  normal priority) and "Create reminder" inserts a `Reminders` row due in one hour, then
+  calls `ModuleContext.RefreshModule` so the other module refreshes and reschedules.
+
+Cross-module commands use the two `ModuleContext` callbacks: `OpenExpanded(moduleId)`
+(note/reminder/task row → dashboard, notification click) and `RefreshModule(moduleId)`
+(conversions so the target module reloads immediately).
+
+### 11.8 Settings evolution
 
 The current settings window covers General, Appearance, **Modules** (enable/disable,
 hide/show in dock) and **Notifications** (master toggle + test). Later phases add Dock,
 Data & Backup, About, and per-module settings pages while keeping `settings.json` keys
 compatible and defaulting safely.
 
-### 11.8 Module phases
+### 11.9 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | ModuleManager, PopupHost, SQLite service, settings integration, notifications, scheduler | ✔ Done ✔ Tested (1.3.0) |
-| 2 | Focus, Tasks, Reminders, Quick Ideas/Notes | ◻ Pending |
+| 2 | Focus, Tasks, Reminders, Quick Ideas/Notes | ✔ Done ✔ Tested (1.4.0) |
 | 3 | Habits, Medication, Health & Lifestyle | ◻ Pending |
 | 4 | Dashboard, Daily Overview, Notes manager, Calendar/planner, Statistics | ◻ Pending |
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ◻ Pending |
 | 6 | Profiling, leak checks, migration/backup tests, startup/sleep/multi-monitor tests, installer readiness | ◻ Pending |
 
-### 11.9 Invariants for future work
+### 11.10 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.

@@ -1,0 +1,132 @@
+<UserControl x:Class="RightDock.Modules.Tasks.TasksExpandedView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Segoe UI Variable Text, Segoe UI"
+             TextOptions.TextFormattingMode="Display"
+             UseLayoutRounding="True" SnapsToDevicePixels="True">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="440"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel>
+            <Grid Margin="1,0,0,6">
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TASK LIST" Margin="0"/>
+                <Button x:Name="NewButton" Style="{StaticResource MdGhostButton}" Content="+ New task"
+                        FontSize="10.5" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Click="New_Click"/>
+            </Grid>
+
+            <TextBox x:Name="SearchBox" Style="{StaticResource MdInput}" TextChanged="Search_TextChanged"
+                     AutomationProperties.AutomationId="TaskSearch"/>
+
+            <WrapPanel Margin="0,9,0,0">
+                <ToggleButton x:Name="ViewToday" Style="{StaticResource MdChip}" Content="Today"
+                              Tag="today" Click="View_Click"/>
+                <ToggleButton x:Name="ViewUpcoming" Style="{StaticResource MdChip}" Content="Upcoming"
+                              Tag="upcoming" Click="View_Click"/>
+                <ToggleButton x:Name="ViewCompleted" Style="{StaticResource MdChip}" Content="Completed"
+                              Tag="completed" Click="View_Click"/>
+                <ToggleButton x:Name="ViewAll" Style="{StaticResource MdChip}" Content="All"
+                              Tag="all" Click="View_Click"/>
+            </WrapPanel>
+
+            <TextBlock x:Name="ListCountText" Style="{StaticResource MdCaption}" Margin="1,4,0,4"/>
+
+            <ScrollViewer MaxHeight="470" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="TaskPanel"/>
+            </ScrollViewer>
+
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                       Text="No tasks in this view."/>
+        </StackPanel>
+
+        <Border Grid.Column="1" Style="{StaticResource MdCard}" Margin="16,0,0,0" Padding="18">
+            <StackPanel>
+                <Grid Margin="0,0,0,12">
+                    <TextBlock x:Name="EditorTitle" Style="{StaticResource MdTitle}" Text="New task"/>
+                    <TextBlock x:Name="StatusText" FontSize="10.5" Foreground="#9CC7E9"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="TITLE"/>
+                <TextBox x:Name="TitleInput" Style="{StaticResource MdInput}" TextChanged="Editor_TextChanged"
+                         AutomationProperties.AutomationId="TaskTitle"/>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="DUE" Margin="1,12,0,6"/>
+                <TextBox x:Name="DueInput" Style="{StaticResource MdInput}"
+                         AutomationProperties.AutomationId="TaskDue"/>
+                <TextBlock Style="{StaticResource MdCaption}" Margin="1,4,0,0"
+                           Text="Examples: 14:30, 2026-11-20, 11/20 09:00. Leave empty for no due date."/>
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="CATEGORY"/>
+                        <TextBox x:Name="CategoryInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="TaskCategory"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                        <TextBlock Style="{StaticResource MdSectionTitle}" Text="PROJECT"/>
+                        <TextBox x:Name="ProjectInput" Style="{StaticResource MdInput}"
+                                 AutomationProperties.AutomationId="TaskProject"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="PRIORITY" Margin="1,12,0,6"/>
+                <WrapPanel>
+                    <ToggleButton x:Name="PriorityLow" Style="{StaticResource MdChip}" Content="Low"
+                                  Tag="1" Click="Priority_Click"/>
+                    <ToggleButton x:Name="PriorityNormal" Style="{StaticResource MdChip}" Content="Normal"
+                                  Tag="2" Click="Priority_Click"/>
+                    <ToggleButton x:Name="PriorityHigh" Style="{StaticResource MdChip}" Content="High"
+                                  Tag="3" Click="Priority_Click"/>
+                </WrapPanel>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="REPEAT" Margin="1,12,0,6"/>
+                <WrapPanel>
+                    <ToggleButton x:Name="RepeatNone" Style="{StaticResource MdChip}" Content="Once"
+                                  Tag="none" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatDaily" Style="{StaticResource MdChip}" Content="Daily"
+                                  Tag="daily" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatWeekly" Style="{StaticResource MdChip}" Content="Weekly"
+                                  Tag="weekly" Click="Repeat_Click"/>
+                    <ToggleButton x:Name="RepeatMonthly" Style="{StaticResource MdChip}" Content="Monthly"
+                                  Tag="monthly" Click="Repeat_Click"/>
+                </WrapPanel>
+
+                <TextBlock Style="{StaticResource MdSectionTitle}" Text="NOTES" Margin="1,8,0,6"/>
+                <TextBox x:Name="NotesInput" Style="{StaticResource MdInput}" Height="84"
+                         AutomationProperties.AutomationId="TaskNotes"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto"/>
+
+                <TextBlock x:Name="ErrorText" Foreground="#FF9A9A" FontSize="11" Margin="1,8,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="SaveButton" Style="{StaticResource MdPrimaryButton}" Content="Save task"
+                            Click="Save_Click"/>
+                    <Button x:Name="ClearButton" Grid.Column="1" Style="{StaticResource MdSecondaryButton}"
+                            Content="Clear" Margin="8,0,0,0" HorizontalAlignment="Left" Click="Clear_Click"/>
+                    <Button x:Name="DeleteButton" Grid.Column="2" Style="{StaticResource MdDangerButton}"
+                            Content="Delete" IsEnabled="False" Click="Delete_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
