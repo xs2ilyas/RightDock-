@@ -79,7 +79,7 @@ RightDock/
 │  ├─ PopupHost.cs           One compact + one expanded popup per module
 │  ├─ ModulePopupWindow.xaml/.cs  Shared popup shell (title, icon, close, placement)
 │  ├─ Dashboard/             DashboardModule + daily overview widgets
-│  ├─ Focus/                 FocusModule + compact/expanded timer views
+│  ├─ Focus/                 FocusModule + compact/expanded views + draggable mini timer
 │  ├─ Tasks/                 TasksModule + compact/expanded list/editor views
 │  ├─ Reminders/             RemindersModule (scheduler integration) + views
 │  ├─ Notes/                 NotesModule (capture, conversion, archive) + views
@@ -319,7 +319,8 @@ immediate `ModuleManager` calls, and persisted immediately; there is no Save/App
 %APPDATA%\RightDock\
 ├─ pins.json       [ { "Name": …, "Path": …, "Icon": "lucide:…" } ]
 ├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "NotificationsEnabled": true,
-│                    "FocusSound": "classic", "ReminderSound": "soft" }
+│                    "FocusSound": "classic", "ReminderSound": "soft",
+│                    "MiniTimerPinned": true, "MiniTimerLeft": …, "MiniTimerTop": … }
 ├─ rightdock.db    SQLite database (WAL): module state + all productivity data
 ├─ backups\        ZIP backups chosen by the user, plus pre-restore-<timestamp>\ safety copies
 ├─ restore-staging\  extracted backup awaiting apply at next start
@@ -379,7 +380,7 @@ A backup is one ZIP chosen by the user (default name
 | Entry | Source |
 | --- | --- |
 | `rightdock.db` | `SqliteConnection.BackupDatabase` copy, switched to `journal_mode=DELETE` so the archive is one self-contained file (no `-wal`/`-shm`) |
-| `settings.json` | dock settings (auto-hide, icon color, notifications) |
+| `settings.json` | dock settings (auto-hide, icon color, notifications, bells, mini timer) |
 | `pins.json` | dock pins |
 | `icons/` | user SVG icons, when present |
 | `backup.json` | app version, UTC creation time, schema version and per-table row counts |
@@ -438,8 +439,12 @@ open the database while the old process is still shutting down; a duplicate star
   **150.4 MB working set, 98.9 MB private, 0.016 CPU seconds over 10 s, 476 handles,
   9 threads** after a stress run; 1.9.0 (bell sounds registered, no sound playing)
   idles at **109.0 MB working set, 62.2 MB private, 0.016 CPU seconds over 10 s,
-  463 handles, 17 threads** on a fresh published process. Bell streams are created on
-  the first ring and cached per selected tone, so an idle session holds no audio buffers.
+  463 handles, 17 threads** on a fresh published process; 1.10.0 (mini timer code present,
+  no session running) idles at **108.6 MB working set, 61.0 MB private, 0.016 CPU seconds
+  over 10 s, 420 handles, 13 threads**. Bell streams are created on the first ring and
+  cached per selected tone, so an idle session holds no audio buffers; the mini timer
+  window is created only when a focus session starts and redraws on the existing 1 s
+  focus tick.
   A 27-cycle UI stress run (~650 popup open/close operations across all
   twelve modules) plateaued at **≈111 MB private / ≈163 MB working set with flat handles
   (483–492), GDI (38) and USER (31) counts**, confirming popups are reclaimed after GC.
@@ -489,15 +494,15 @@ system while preserving everything above. **Phase 1 (core infrastructure) is imp
 in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
 Medication, Health & Lifestyle) in 1.5.0, Phase 4 (Dashboard, Notes manager,
 Calendar/planner, Statistics) in 1.6.0, Phase 5 (Quick Tools and Learning) in
-1.7.0, Phase 6 (hardening, data tools and release assets) in 1.8.0, and Phase 7
-(bell sounds for focus and reminders) in 1.9.0**; the
-launcher, AppBar, auto-hide, icons and settings keep their contracts.
+1.7.0, Phase 6 (hardening, data tools and release assets) in 1.8.0, Phase 7
+(bell sounds for focus and reminders) in 1.9.0, and Phase 8 (draggable focus mini timer)
+in 1.10.0**; the launcher, AppBar, auto-hide, icons and settings keep their contracts.
 
 ### 11.1 Layering
 
 ```
 Presentation      MainWindow (dock), PopupHost, ModulePopupWindow, SettingsWindow,
-                  module views (XAML, added per module)
+                  FocusMiniWindow (focus pill), module views (XAML, added per module)
 Application       ModuleManager, Scheduler, NotificationService, SoundService
 Domain            Focus, Tasks, Reminders, Habits, Medication, Health, Notes,
                   Learning, Statistics (pure C# models + rules, Phase 2+)
@@ -591,7 +596,7 @@ programmatic updates with a `_syncing` flag, and rebuild lists only when a view 
 
 | Module | Dock icon | Compact | Expanded | Persistence |
 | --- | --- | --- | --- | --- |
-| Focus | `lucide:timer` | Daily totals/session count, 15/25/45/60 presets, start/pause/resume/reset, recent sessions | 7-day chart, session history, task linking | `FocusSessions` |
+| Focus | `lucide:timer` | Daily totals/session count, 15/25/45/60 presets, start/pause/resume/reset, recent sessions, floating mini timer | 7-day chart, session history, task linking | `FocusSessions` |
 | Tasks | `lucide:clipboard-list` | Quick add (Enter), today's tasks, complete toggle | Views Today/Upcoming/Completed/All, search, full editor (due, category, project, priority, monthly/daily/weekly recurrence, notes) | `Tasks` |
 | Reminders | `lucide:bell` | Quick add (+1 h), complete, snooze menu | Active/History, one-time/daily/weekly/custom-N-days recurrence, snooze, notes | `Reminders` |
 | Notes | `lucide:notebook-pen` | Multiline capture (Ctrl+Enter), recent notes | Search, category filter chips, pin/unpin, archive/restore, convert to task/reminder | `Notes` |
@@ -603,7 +608,9 @@ Key behaviors:
   `FocusSessions` row and completion finalizes planned/actual seconds plus `IsCompleted`.
   `Deactivate()` finalizes an in-flight session as not completed; stale sessions are
   finalized on activation so a crash/restart cannot leave an open timer. Preset and linked
-  task are locked while running. Completion posts a toast that opens the expanded view.
+  task are locked while running. Completion posts a toast that opens the expanded view and
+  plays the three-ring bell. Starting a session also shows the `FocusMiniWindow` pill
+  (section 11.13), which is separate from the popup host.
 - **Tasks** complete-and-reschedule: when a recurring task is completed, the row is marked
   completed and a new occurrence is inserted from the due date, so history is preserved.
   Due dates are parsed from human-friendly input (`14:30`, `11/20 09:00`,
@@ -778,14 +785,35 @@ Phase 7 adds audible alerts without shipping audio files.
   `settings.json` as `FocusSound`/`ReminderSound`, are validated against the catalog on
   load, and default to `classic`/`soft`.
 
-### 11.13 Settings evolution
+### 11.13 Focus mini timer (implemented in 1.10.0)
+
+`Modules/Focus/FocusMiniWindow.xaml` is a borderless, transparent, topmost WPF window
+(176×64 DIP, `ShowInTaskbar=False`, `ShowActivated=False`) hosting a dark pill with a
+26 px tabular mm:ss clock and two 24 px buttons (pin, close). It is created by the Focus
+module, not by the popup host, and is independent of the compact/expanded views.
+
+- `FocusModule.Start()` creates the window lazily and calls `Present()`. Placement restores
+  `MiniTimerLeft`/`MiniTimerTop` from `settings.json`, clamped to the virtual screen; with
+  no saved values it sits 18 DIP from the work area's right and bottom edges, left of the
+  dock. Showing it does not activate it.
+- `Changed` redraws the clock every tick. Paused sessions use amber digits, running
+  sessions white ones.
+- Dragging calls `DragMove()`; the resulting position is saved after the drag. The pin
+  button toggles `Topmost` and saves `MiniTimerPinned` (default true). The close button
+  hides the pill for the current session.
+- Reset, completion, `Deactivate()` and application shutdown close the window. `App.xaml`
+  uses `ShutdownMode="OnMainWindowClose"` so an open pill cannot keep the process alive
+  after the dock closes.
+
+### 11.14 Settings evolution
 
 The settings window covers General, Appearance, **Modules** (enable/disable, hide/show in
 dock), **Notifications** (master toggle, test card, bell pickers and previews), **Data**
-(diagnostics, backup, restore, copy diagnostics) and **Startup**. `settings.json` keys
+(diagnostics, backup, restore, copy diagnostics) and **Startup**. The focus mini timer has
+no settings page: its pin and close controls live on the pill itself. `settings.json` keys
 stay compatible and default safely; the window is 560×560 with six tabs.
 
-### 11.14 Module phases
+### 11.15 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -796,8 +824,9 @@ stay compatible and default safely; the window is 560×560 with six tabs.
 | 5 | Breathing, Screen-break reminder, Learning tracker (Quick Tools stays at exactly three tools) | ✔ Done ✔ Tested (1.7.0) |
 | 6 | Profiling, leak checks, migration/backup/restore, startup/sleep/display tests, installer readiness | ✔ Done ✔ Tested (1.8.0) |
 | 7 | Ten synthesized bell sounds, triple focus ring, single reminder ring, sound pickers | ✔ Done ✔ Tested (1.9.0) |
+| 8 | Draggable focus mini timer with pin, close, paused state and persisted placement | ✔ Done ✔ Tested (1.10.0) |
 
-### 11.15 Invariants for future work
+### 11.16 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.
@@ -818,8 +847,8 @@ publish\RightDock.exe
 ```
 
 `tools\publish.ps1` writes `publish\` and the portable ZIP
-`dist\RightDock-1.9.0-win-x64.zip`; add `-Installer` to compile
-`dist\RightDock-1.9.0-setup.exe` with Inno Setup 6 (install it from
+`dist\RightDock-1.10.0-win-x64.zip`; add `-Installer` to compile
+`dist\RightDock-1.10.0-setup.exe` with Inno Setup 6 (install it from
 https://jrsoftware.org/isinfo.php first). Stop the running instance before republishing
 (the exe/dll are locked while running). `publish/` must include the SQLite native
 runtimes (`runtimes/win-x64/native/e_sqlite3.dll`); `dotnet publish` copies them
@@ -836,4 +865,5 @@ User-facing behavior:
   restores a backup, runs an integrity check, opens the data folder and copies
   diagnostics; restore restarts the app automatically.
 - Notifications appear as dark cards in the bottom-right corner.
-- **Close** exits and releases the reserved space.
+- Starting a focus session shows the draggable mini timer; **Close** on the dock exits and
+  releases the reserved space.

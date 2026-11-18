@@ -8,11 +8,62 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Post-1.9 maintenance: drag reordering, per-monitor dock placement, per-module settings
+- Post-1.10 maintenance: drag reordering, per-monitor dock placement, per-module settings
   page, signed installer and scheduled backups.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.10.0] — 2026-11-18 — Phase 8 focus mini timer
+
+### Added
+- **Focus mini timer** (`Modules/Focus/FocusMiniWindow.xaml`) — a 176×64 DIP dark pill
+  that appears automatically when a focus session starts. It shows the remaining time in
+  tabular mm:ss digits, a pin button and a close button, and can be dragged anywhere on
+  the desktop.
+- **Pin toggle** — the pin button switches the pill between always-on-top and normal
+  z-order; the active state uses an accent glyph on a tinted background. The choice is
+  saved as `MiniTimerPinned` (default `true`).
+- **Placement persistence** — the pill's position is saved as `MiniTimerLeft`/`MiniTimerTop`
+  in `settings.json` after a drag and restored on the next start, clamped to the virtual
+  screen. Without a saved position it opens at the bottom-right corner of the work area,
+  left of the dock.
+- **State feedback** — the time turns amber while the session is paused and white while
+  it runs; the close button hides the pill for the current session (the focus session
+  continues), and starting the next session shows it again. Reset, completion and module
+  deactivation hide it.
+
+### Changed
+- Starting a focus session shows the pill without activating it, so the compact popup
+  keeps focus.
+- `ShutdownMode` is now `OnMainWindowClose`; closing the dock exits even when the timer
+  pill or another auxiliary window is still open.
+- Version 1.10.0.
+
+### Verified
+- Starting a 25-minute session from the Focus popup created the "Focus timer" window
+  (176×64 DIP) at the default bottom-right position, with `24:59` ticking down while the
+  compact view showed `FOCUSING`.
+- Dragging from the time area moved the pill and wrote `MiniTimerLeft: 1780` /
+  `MiniTimerTop: 1016.8` to `settings.json`; the next start reopened at that position.
+- The pin button flipped `MiniTimerPinned` to `false` and `WS_EX_TOPMOST` disappeared from
+  the window; the glyph turned gray and the tint cleared. After a restart-style relaunch
+  the saved pin state was applied.
+- Pausing changed the digits to amber; resuming returned them to white. Closing the pill
+  hid it while the session stayed paused in the compact view, and Reset hid it for good;
+  the following Start recreated it.
+- Closing the dock with the pill open exited the process (previously it would have
+  lingered); no RightDock process remained.
+- Test focus sessions were removed from the live database afterwards and the saved
+  position/pin preferences were reset to defaults.
+
+### Files
+- Added: `Modules/Focus/FocusMiniWindow.xaml`, `Modules/Focus/FocusMiniWindow.xaml.cs`.
+- Changed: `App.xaml`, `AppSettings.cs`, `Modules/Focus/FocusModule.cs`,
+  `RightDock.csproj`, `installer/RightDock.iss`, `README.md`, `PROJECT_ARCHITECTURE.md`,
+  `IMPLEMENTATION_PROGRESS.md`.
 
 ---
 

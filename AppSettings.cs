@@ -12,6 +12,9 @@ namespace RightDock
         public bool NotificationsEnabled { get; set; } = true;
         public string FocusSound { get; set; } = BellSynth.DefaultFocus;
         public string ReminderSound { get; set; } = BellSynth.DefaultReminder;
+        public bool MiniTimerPinned { get; set; } = true;
+        public double? MiniTimerLeft { get; set; }
+        public double? MiniTimerTop { get; set; }
     }
 
     internal static class SettingsStore

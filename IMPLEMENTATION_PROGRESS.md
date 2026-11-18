@@ -1,14 +1,14 @@
 # RightDock — Implementation Progress
 
-> Release **1.9.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.10.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
 > Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
 > hardening (profiling, backup/restore, migration and OS-event tests, installer assets) +
-> Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring)
-> complete.
-> Next up: post-1.9 maintenance (see §14 known limitations).
-> Last updated: 2026-11-16.
+> Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring) +
+> Phase 8 focus mini timer (draggable pill with pin and close) complete.
+> Next up: post-1.10 maintenance (see §15 known limitations).
+> Last updated: 2026-11-18.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
 **◻ Pending** · **△ Partial**
@@ -29,7 +29,8 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.7.0 | Phase 5: Quick Tools (notes, breathing, screen breaks) + Learning tracker | ✔ Done ✔ Tested |
 | v1.8.0 | Phase 6: profiling/leak checks, migration and backup/restore tests, sleep/display handling, installer assets | ✔ Done ✔ Tested |
 | v1.9.0 | Phase 7: ten synthesized bell sounds, three-ring focus completion, one-ring reminders, sound pickers in Settings | ✔ Done ✔ Tested |
-| Docs | Architecture, progress, changelog, GitHub repository | ✔ Done |
+| v1.10.0 | Phase 8: draggable focus mini timer with pin, close, persisted placement | ✔ Done ✔ Tested |
+| Docs | Architecture, progress, changelog, README, GitHub repository | ✔ Done |
 
 ---
 
@@ -677,7 +678,56 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 12. Documentation and repository (completed)
+## 12. v1.10.0 — Phase 8 focus mini timer (completed, tested)
+
+### Window (`Modules/Focus/FocusMiniWindow.xaml`)
+- A 176×64 DIP borderless, transparent `Window` (`ShowInTaskbar=False`,
+  `ShowActivated=False`, manual placement, topmost by default) containing a 15 px-radius
+  dark navy pill with a soft shadow. Contents are the 26 px tabular mm:ss clock and two
+  24 px buttons: pin and close. There is no title bar, resize grip or timer icon.
+- `FocusModule` creates it lazily on the first Start and calls `Present()`. Placement
+  restores `MiniTimerLeft`/`MiniTimerTop` from `settings.json` (clamped to the virtual
+  screen); without saved values it opens 18 DIP from the work area's right and bottom
+  edges, which parks it just left of the dock above the taskbar.
+- Dragging uses `DragMove()` on the pill background; the resulting position is saved after
+  the drag. The clock turns amber while paused and white while running, and the pin glyph
+  is an accent pushpin on a tinted background when topmost, gray otherwise.
+- The close button calls `Hide()` so the session keeps running; the pill reappears on the
+  next Start. Reset, completion, module deactivation and app shutdown close it.
+
+### Lifecycle
+- `Start()` shows the pill before notifying views; `Pause()` leaves it visible in the
+  paused color; `Resume()` returns it to the running color; `Changed` drives per-second
+  refresh. Showing it does not activate it, so starting from the Focus popup keeps the
+  popup focused.
+- `App.xaml` sets `ShutdownMode="OnMainWindowClose"`, so closing the dock exits the process
+  even when the pill is still open.
+
+### Settings
+- `AppSettings` adds `MiniTimerPinned` (bool, default `true`) and nullable
+  `MiniTimerLeft`/`MiniTimerTop`. No Settings page is needed because the controls live on
+  the pill; existing `settings.json` files load unchanged.
+
+### Verified on a live Windows 11 session
+- Starting a 25-minute session created the "Focus timer" window at 176×64 DIP in the
+  default bottom-right position, ticking `24:59` while the compact view reported
+  `FOCUSING`; the dock remained the active reservation owner.
+- A drag moved the pill and wrote `MiniTimerLeft: 1780` / `MiniTimerTop: 1016.8`; the next
+  Start reopened at the saved position, and the default position returned after the saved
+  values were removed.
+- The pin button set `MiniTimerPinned: false`, cleared `WS_EX_TOPMOST` and switched the
+  glyph to gray; relaunching the app restored the saved pin state.
+- Pause turned the digits amber, resume turned them white, and closing the pill hid it
+  while the compact view still showed the paused session; Reset hid it permanently,
+  and the following Start recreated it.
+- Closing the dock with the pill open exited the process cleanly (previously the pill
+  kept the application alive).
+- Test sessions were deleted from the live database and the test position/pin values were
+  reset, leaving the user's existing sessions untouched.
+
+---
+
+## 13. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -687,20 +737,20 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 13. Measured resource baseline
+## 14. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
 visible, all twelve modules registered, no popups open, 10 s idle sample with
-`tools/measure.ps1`, fresh 1.9.0 process):
+`tools/measure.ps1`, fresh 1.10.0 process):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 109.0 MB |
-| Private bytes | 62.2 MB |
+| Working set | 108.6 MB |
+| Private bytes | 61.0 MB |
 | Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
-| Handles / threads | 463 / 17 |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing |
+| Handles / threads | 420 / 13 |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing; mini timer redraws on the focus tick and exists only during a session |
 | Audio | WAV rendered and cached on the first ring; no audio buffers while idle |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
@@ -716,13 +766,14 @@ Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB privat
 ≈123 MB / ≈71 MB / 0 %; 1.5.0 Phase 3 ≈124 MB / ≈72 MB / ≈0.07 %; 1.6.0 Phase 4 after
 opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB / 71.5 MB /
 0.047 CPU seconds over 30 s; 1.8.0 post-stress 150.4 MB / 98.9 MB / 0.016 CPU seconds
-over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s. The 1.8.0
+over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s; 1.10.0 fresh
+108.6 MB / 61.0 MB / 0.016 CPU seconds over 10 s. The 1.8.0
 sample was taken after the stress run, so WPF's retained views are included; 1.9.0 was
 measured on a freshly started published process.
 
 ---
 
-## 14. Known limitations (current release)
+## 15. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -798,7 +849,7 @@ measured on a freshly started published process.
 
 ---
 
-## 15. Pending roadmap
+## 16. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -853,11 +904,17 @@ measured on a freshly started published process.
 - [x] Choices persist in `settings.json`, are validated on load, and real alerts stay
       silent while notifications are off.
 
+### Phase 8 — Focus mini timer (completed in 1.10.0)
+- [x] A small draggable timer pill appears automatically when a focus session starts.
+- [x] Pin toggles always-on-top and persists; close hides it for the session.
+- [x] Position persists, and reset/completion/deactivation hide it.
+
 ---
 
-## 16. Acceptance criteria tracking
+## 17. Acceptance criteria tracking
 
-From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5):
+From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5,
+28 Phase 7 and 29 Phase 8):
 
 | # | Criterion | Status |
 | --- | --- | --- |
@@ -889,10 +946,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 26 | Learning tracker supports goals, sessions and progress | ✔ Tested (goal editor, session logging, auto progress, filters, restart) |
 | 27 | Quick Tools contains exactly three tools | ✔ Tested (note capture, breathing, screen break only) |
 | 28 | Focus and reminder bells differ, ring three times / once, and offer ten choices each | ✔ Tested (ten pickers with previews, `glass` focus ×3 and `musicbox` reminder ×1 in the log, persistence across restart) |
+| 29 | Focus shows a small draggable timer with pin and close while a session runs | ✔ Tested (auto-show, drag with saved position, pin/topmost, paused color, hide on close/reset, clean dock exit) |
 
 ---
 
-## 17. Test method notes
+## 18. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -923,6 +981,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   does not raise WPF `Click`, so handlers (priority/repeat/filter chips, round
   checkboxes) do not run. Use real mouse clicks (`SetCursorPos` + `mouse_event`) or
   `InvokePattern` where applicable.
+- **The focus mini timer is its own top-level window** titled "Focus timer", outside the
+  dock's UIA tree, with automation IDs `MiniTimerTime`, `MiniTimerPinButton` and
+  `MiniTimerCloseButton`. Drag checks use `SetCursorPos` + `mouse_event` while
+  `DragMove` runs, then read `settings.json`; pin state is confirmed through
+  `WS_EX_TOPMOST` (`GetWindowLong` -20, `0x8`) and the saved `MiniTimerPinned` value.
 - **The dock must be revealed before clicking** — hover the right edge, wait for the
   slide-in, then compute points from `GetWindowRect`.
 - Geometry verified through Win32 (`GetWindowRect`, `SystemParameters.WorkArea`) rather

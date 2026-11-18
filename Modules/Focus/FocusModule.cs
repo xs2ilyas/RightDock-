@@ -27,6 +27,7 @@ namespace RightDock.Modules.Focus
 
         private FocusStats _stats = new FocusStats();
         private List<FocusSessionItem> _history = new List<FocusSessionItem>();
+        private FocusMiniWindow _mini;
 
         internal event Action Changed;
 
@@ -90,6 +91,7 @@ namespace RightDock.Modules.Focus
 
         public override void Deactivate()
         {
+            CloseMiniTimer();
             _timer?.Stop();
 
             if (_sessionId != null)
@@ -137,6 +139,7 @@ namespace RightDock.Modules.Focus
             _paused = false;
 
             _timer.Start();
+            ShowMiniTimer();
             Changed?.Invoke();
         }
 
@@ -166,6 +169,7 @@ namespace RightDock.Modules.Focus
 
         internal void Reset()
         {
+            CloseMiniTimer();
             _timer?.Stop();
 
             if (_sessionId != null)
@@ -209,6 +213,31 @@ namespace RightDock.Modules.Focus
             Changed?.Invoke();
         }
 
+        private void ShowMiniTimer()
+        {
+            AppSettings settings = _context?.Settings;
+            if (settings == null) return;
+
+            if (_mini == null)
+            {
+                FocusMiniWindow mini = new FocusMiniWindow(this, settings);
+                mini.Closed += (_, __) =>
+                {
+                    if (ReferenceEquals(_mini, mini)) _mini = null;
+                };
+                _mini = mini;
+            }
+
+            _mini.Present();
+        }
+
+        private void CloseMiniTimer()
+        {
+            FocusMiniWindow mini = _mini;
+            _mini = null;
+            mini?.Close();
+        }
+
         private void OnTick(object sender, EventArgs e)
         {
             if (_running && ElapsedSeconds >= _plannedSeconds)
@@ -222,6 +251,7 @@ namespace RightDock.Modules.Focus
 
         private void Complete()
         {
+            CloseMiniTimer();
             _timer.Stop();
 
             string completedTask = _taskTitle;
