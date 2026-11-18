@@ -47,6 +47,7 @@ RightDock/
 ├─ DockServices.cs           Owns settings, database, scheduler, notifications, module manager
 ├─ MainWindow.xaml           ｜ Dock shell: 50 px column, pins, module buttons, Add / Settings / Close
 ├─ MainWindow.xaml.cs        ｜ AppBar reservation, auto-hide state machine, pin/module actions
+├─ TrayIcon.cs               Notification-area icon, dark menu, open/minimize/restart/exit
 ├─ AppBarDock.cs             SHAppBarMessage wrapper (ABM_NEW / QUERYPOS / SETPOS / REMOVE)
 ├─ NativeMethods.cs          Win32 structs and P/Invoke declarations
 ├─ PinStore.cs               Pin model + pins.json load/save
@@ -364,7 +365,8 @@ module keeps its row and all module data intact.
 | Sleep / resume | `WM_POWERBROADCAST` (`PBT_APMRESUMEAUTOMATIC`, `PBT_APMRESUMESUSPEND`) → scheduler reconcile + re-reserve |
 | Clock change | `WM_TIMECHANGE` → scheduler reconcile |
 | Fullscreen detection | `ABN_FULLSCREENAPP` from the shell |
-| Notifications | In-app `ToastWindow` cards (no shell tray icon) |
+| Notifications | In-app `ToastWindow` cards (the tray icon controls the app, not alerts) |
+| Tray icon | WinForms `NotifyIcon` with the exe icon and a dark context menu; Restart reuses the `--restart` handoff |
 | Backup / restore | ZIP archive with manifest, staged restore applied before DB open, safety copy |
 
 Storage failures are non-fatal by design: corrupt or missing JSON falls back to
@@ -441,10 +443,13 @@ open the database while the old process is still shutting down; a duplicate star
   idles at **109.0 MB working set, 62.2 MB private, 0.016 CPU seconds over 10 s,
   463 handles, 17 threads** on a fresh published process; 1.10.0 (mini timer code present,
   no session running) idles at **108.6 MB working set, 61.0 MB private, 0.016 CPU seconds
-  over 10 s, 420 handles, 13 threads**. Bell streams are created on the first ring and
-  cached per selected tone, so an idle session holds no audio buffers; the mini timer
-  window is created only when a focus session starts and redraws on the existing 1 s
-  focus tick.
+  over 10 s, 420 handles, 13 threads**; 1.11.0 with the tray icon active idles at
+  **119.8 MB working set, 69.9 MB private, 0.016 CPU seconds over 10 s, 409 handles,
+  13 threads**. Bell streams are created on the first ring and cached per selected tone,
+  so an idle session holds no audio buffers; the mini timer window is created only when a
+  focus session starts and redraws on the existing 1 s focus tick; the tray icon has no
+  timer and wakes only for shell messages (the on-demand WinForms notification-area stack
+  accounts for roughly 11 MB of the 1.11.0 working set).
   A 27-cycle UI stress run (~650 popup open/close operations across all
   twelve modules) plateaued at **≈111 MB private / ≈163 MB working set with flat handles
   (483–492), GDI (38) and USER (31) counts**, confirming popups are reclaimed after GC.
@@ -495,14 +500,15 @@ in 1.3.0, Phase 2 (Focus, Tasks, Reminders, Notes) in 1.4.0, Phase 3 (Habits,
 Medication, Health & Lifestyle) in 1.5.0, Phase 4 (Dashboard, Notes manager,
 Calendar/planner, Statistics) in 1.6.0, Phase 5 (Quick Tools and Learning) in
 1.7.0, Phase 6 (hardening, data tools and release assets) in 1.8.0, Phase 7
-(bell sounds for focus and reminders) in 1.9.0, and Phase 8 (draggable focus mini timer)
-in 1.10.0**; the launcher, AppBar, auto-hide, icons and settings keep their contracts.
+(bell sounds for focus and reminders) in 1.9.0, Phase 8 (draggable focus mini timer)
+in 1.10.0, and Phase 9 (system tray icon) in 1.11.0**; the launcher, AppBar, auto-hide,
+icons and settings keep their contracts.
 
 ### 11.1 Layering
 
 ```
 Presentation      MainWindow (dock), PopupHost, ModulePopupWindow, SettingsWindow,
-                  FocusMiniWindow (focus pill), module views (XAML, added per module)
+                  FocusMiniWindow (focus pill), TrayIcon, module views (XAML, added per module)
 Application       ModuleManager, Scheduler, NotificationService, SoundService
 Domain            Focus, Tasks, Reminders, Habits, Medication, Health, Notes,
                   Learning, Statistics (pure C# models + rules, Phase 2+)
@@ -805,7 +811,29 @@ module, not by the popup host, and is independent of the compact/expanded views.
   uses `ShutdownMode="OnMainWindowClose"` so an open pill cannot keep the process alive
   after the dock closes.
 
-### 11.14 Settings evolution
+### 11.14 System tray icon (implemented in 1.11.0)
+
+`TrayIcon.cs` creates a WinForms `NotifyIcon` after the dock window is shown, carrying the
+executable's own icon (`ExtractAssociatedIcon`) and the tooltip "Right Dock". The icon
+runs on the WPF UI thread; `UseWindowsForms` was already enabled in the project, so no
+new package or process is involved.
+
+- The context menu is a `ContextMenuStrip` with a `ToolStripProfessionalRenderer` dark
+  color table (`#1C1C1C` background, `#33FFFFFF` hover and border, `#1FFFFFFF`
+  separators) so it matches the dock. Items: **Open Right Dock**, **Minimize to tray**,
+  a separator, **Restart Right Dock**, **Exit Right Dock**.
+- The menu recomputes state on every open: Open is disabled while `IsDockVisible`;
+  Minimize is disabled while `CanHideToTray` is false (already hidden or a modal dialog
+  is open). Left-clicking the icon calls `RestoreFromTray()`.
+- `MainWindow.MinimizeToTray()` sets `_hiddenByTray`, closes module popups, unregisters
+  the AppBar, hides the window and makes the hover poll return early, so edge reveal
+  cannot bring back a dock the user deliberately put away.
+- `RestoreFromTray()` clears the flag, shows and re-reserves through `ShowDock()`, and
+  gives a 1.6 s preview when auto-hide is on.
+- Restart uses `Process.Start(exe, "--restart")` with the existing mutex handoff; Exit
+  calls `Application.Shutdown()`. `App.OnExit` disposes the icon before the services.
+
+### 11.15 Settings evolution
 
 The settings window covers General, Appearance, **Modules** (enable/disable, hide/show in
 dock), **Notifications** (master toggle, test card, bell pickers and previews), **Data**
@@ -813,7 +841,7 @@ dock), **Notifications** (master toggle, test card, bell pickers and previews), 
 no settings page: its pin and close controls live on the pill itself. `settings.json` keys
 stay compatible and default safely; the window is 560×560 with six tabs.
 
-### 11.15 Module phases
+### 11.16 Module phases
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -825,8 +853,9 @@ stay compatible and default safely; the window is 560×560 with six tabs.
 | 6 | Profiling, leak checks, migration/backup/restore, startup/sleep/display tests, installer readiness | ✔ Done ✔ Tested (1.8.0) |
 | 7 | Ten synthesized bell sounds, triple focus ring, single reminder ring, sound pickers | ✔ Done ✔ Tested (1.9.0) |
 | 8 | Draggable focus mini timer with pin, close, paused state and persisted placement | ✔ Done ✔ Tested (1.10.0) |
+| 9 | System tray icon with open, minimize to tray, restart and exit | ✔ Done ✔ Tested (1.11.0) |
 
-### 11.16 Invariants for future work
+### 11.17 Invariants for future work
 
 1. The dock remains ~50 px wide, topmost, and reserves work area via AppBar.
 2. Existing pins, icons, colors and settings keep working without migration steps.
@@ -847,8 +876,8 @@ publish\RightDock.exe
 ```
 
 `tools\publish.ps1` writes `publish\` and the portable ZIP
-`dist\RightDock-1.10.0-win-x64.zip`; add `-Installer` to compile
-`dist\RightDock-1.10.0-setup.exe` with Inno Setup 6 (install it from
+`dist\RightDock-1.11.0-win-x64.zip`; add `-Installer` to compile
+`dist\RightDock-1.11.0-setup.exe` with Inno Setup 6 (install it from
 https://jrsoftware.org/isinfo.php first). Stop the running instance before republishing
 (the exe/dll are locked while running). `publish/` must include the SQLite native
 runtimes (`runtimes/win-x64/native/e_sqlite3.dll`); `dotnet publish` copies them
@@ -857,6 +886,8 @@ automatically.
 User-facing behavior:
 
 - Hover the right screen edge to reveal; the dock hides 650 ms after the cursor leaves.
+- Left-click the tray icon to bring the dock back; its menu minimizes to the tray,
+  restarts the app or exits.
 - Left-click a pin to launch; right-click for **Change icon…** / **Remove from dock**.
 - **Add** opens a multi-select file picker (`exe`, `lnk`, `bat`, `cmd`, `msc`, `appref-ms`).
 - Module icons appear above the Add/Settings/Close stack; left-click opens the compact

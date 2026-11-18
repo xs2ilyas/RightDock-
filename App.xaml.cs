@@ -23,6 +23,7 @@ namespace RightDock
     {
         private Mutex _instanceMutex;
         private DockServices _services;
+        private TrayIcon _tray;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -77,6 +78,7 @@ namespace RightDock
             var window = new MainWindow(_services);
             MainWindow = window;
             window.Show();
+            _tray = new TrayIcon(window);
         }
 
         private static Mutex AcquireInstanceMutex(bool waitForPrevious)
@@ -97,6 +99,7 @@ namespace RightDock
 
         protected override void OnExit(ExitEventArgs e)
         {
+            _tray?.Dispose();
             _services?.Dispose();
             _instanceMutex?.Dispose();
             base.OnExit(e);

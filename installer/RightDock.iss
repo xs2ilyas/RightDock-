@@ -3,7 +3,7 @@
 ; The published build is framework-dependent and requires the .NET 5 Desktop Runtime.
 
 #define MyAppName "Right Dock"
-#define MyAppVersion "1.10.0"
+#define MyAppVersion "1.11.0"
 #define MyAppPublisher "RightDock"
 #define MyAppExeName "RightDock.exe"
 

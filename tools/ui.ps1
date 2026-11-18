@@ -58,11 +58,13 @@ if ($Action -eq "list") {
     exit 0
 }
 
-if ($Action -eq "clickxy") {
+if ($Action -eq "clickxy" -or $Action -eq "rightclickxy") {
+    $down = 0x0002; $up = 0x0004
+    if ($Action -eq "rightclickxy") { $down = 0x0008; $up = 0x0010 }
     [Win32.U]::SetCursorPos($X, $Y) | Out-Null
     Start-Sleep -Milliseconds 150
-    [Win32.U]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-    [Win32.U]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    [Win32.U]::mouse_event($down, 0, 0, 0, [UIntPtr]::Zero)
+    [Win32.U]::mouse_event($up, 0, 0, 0, [UIntPtr]::Zero)
     Write-Output ("clicked at " + $X + "," + $Y)
     exit 0
 }
@@ -70,6 +72,31 @@ if ($Action -eq "clickxy") {
 if ($Action -eq "keys") {
     [System.Windows.Forms.SendKeys]::SendWait($Value)
     Write-Output "keys sent"
+    exit 0
+}
+
+if ($Action -eq "invokeglobal" -or $Action -eq "clickglobal") {
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)
+    $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+    if (-not $el) { Write-Output "global element not found (name=$Name)"; exit 1 }
+    if ($Action -eq "invokeglobal") {
+        $pattern = $null
+        if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
+            $pattern.Invoke(); Write-Output "invoked global"; exit 0
+        }
+        if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$pattern)) {
+            $pattern.Toggle(); Write-Output "toggled global"; exit 0
+        }
+        Write-Output "no invoke or toggle pattern"; exit 1
+    }
+    $rect = $el.Current.BoundingRectangle
+    $x = [int]($rect.Left + $rect.Width / 2)
+    $y = [int]($rect.Top + $rect.Height / 2)
+    [Win32.U]::SetCursorPos($x, $y) | Out-Null
+    Start-Sleep -Milliseconds 150
+    [Win32.U]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+    [Win32.U]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    Write-Output ("clicked global at " + $x + "," + $y)
     exit 0
 }
 
@@ -108,31 +135,6 @@ if ($Action -eq "elements") {
             Write-Output ("{0} | name='{1}' | id='{2}'" -f $type, $el.Current.Name, $el.Current.AutomationId)
         }
     }
-    exit 0
-}
-
-if ($Action -eq "invokeglobal" -or $Action -eq "clickglobal") {
-    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)
-    $el = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
-    if (-not $el) { Write-Output "global element not found (name=$Name)"; exit 1 }
-    if ($Action -eq "invokeglobal") {
-        $pattern = $null
-        if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$pattern)) {
-            $pattern.Invoke(); Write-Output "invoked global"; exit 0
-        }
-        if ($el.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$pattern)) {
-            $pattern.Toggle(); Write-Output "toggled global"; exit 0
-        }
-        Write-Output "no invoke or toggle pattern"; exit 1
-    }
-    $rect = $el.Current.BoundingRectangle
-    $x = [int]($rect.Left + $rect.Width / 2)
-    $y = [int]($rect.Top + $rect.Height / 2)
-    [Win32.U]::SetCursorPos($x, $y) | Out-Null
-    Start-Sleep -Milliseconds 150
-    [Win32.U]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-    [Win32.U]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-    Write-Output ("clicked global at " + $x + "," + $y)
     exit 0
 }
 

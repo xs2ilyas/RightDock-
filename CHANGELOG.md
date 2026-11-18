@@ -8,11 +8,57 @@ semantic versioning. Development is organized in phases (see
 ## [Unreleased]
 
 ### Planned
-- Post-1.10 maintenance: drag reordering, per-monitor dock placement, per-module settings
+- Post-1.11 maintenance: drag reordering, per-monitor dock placement, per-module settings
   page, signed installer and scheduled backups.
 
 Earlier releases (1.0.0–1.2.0: dock shell, pins, auto-hide, 181-icon line set, icon
 picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
+## [1.11.0] — 2026-11-18 — Phase 9 system tray icon
+
+### Added
+- **Tray icon** (`TrayIcon.cs`) — the Right Dock application icon in the notification
+  area, with the tooltip "Right Dock". Left-clicking brings the dock back from the tray.
+- **Tray menu** — a dark four-item menu: **Open Right Dock**, **Minimize to tray**,
+  **Restart Right Dock** and **Exit Right Dock**. Open is disabled while the dock is
+  visible; Minimize is disabled while it is already in the tray or a modal dialog is open.
+- **Minimize to tray** — hides the dock window, closes open module popups, unregisters
+  the AppBar (so maximized windows regain the full width) and suspends edge reveal until
+  the dock is restored.
+- **Restart and exit** — Restart relaunches the executable with `--restart`, using the
+  same single-instance handoff as restore; Exit shuts the application down cleanly and
+  removes the icon.
+
+### Changed
+- `tools/ui.ps1` gained `rightclickxy` and no longer requires a window name for
+  `clickglobal`/`invokeglobal`, which made tray-menu testing possible.
+- Version 1.11.0.
+
+### Verified
+- The published build showed the app icon in the notification overflow with the
+  "Right Dock" tooltip.
+- Right-clicking the icon opened the dark menu with the expected labels; **Open** was
+  disabled while the dock was visible and **Minimize** enabled.
+- **Minimize to tray** removed the "Right Dock" window from the visible-window list and
+  the work area returned from 2498 to 2560 px; hovering the right screen edge for two
+  seconds did not reveal the dock. A left-click on the tray icon restored it and the
+  work area returned to 2498 px.
+- **Restart Right Dock** ended the old process and started a new one (single instance
+  retained), with the dock visible and the work area reserved.
+- **Exit Right Dock** terminated the process, removed the tray icon and restored the
+  full work area. Closing the dock normally while the icon was active also exited.
+- Published 1.11.0 reports FileVersion 1.11.0.0; `dist\RightDock-1.11.0-win-x64.zip`
+  holds 37 entries. Settled idle baseline: 119.8 MB working set, 69.9 MB private,
+  0.016 CPU seconds over 10 s, 409 handles, 13 threads.
+- No test data was written; only window and work-area state changed.
+
+### Files
+- Added: `TrayIcon.cs`.
+- Changed: `App.xaml.cs`, `MainWindow.xaml.cs`, `RightDock.csproj`,
+  `installer/RightDock.iss`, `tools/ui.ps1`, `README.md`, `PROJECT_ARCHITECTURE.md`,
+  `IMPLEMENTATION_PROGRESS.md`.
 
 ---
 

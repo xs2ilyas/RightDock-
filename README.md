@@ -4,7 +4,7 @@ A native, single-process productivity dock for the right edge of Windows. Right 
 
 Built with WPF on .NET 5 — no WebView, no Electron, no background services, no network calls.
 
-> Current release: **1.10.0** — dock shell, twelve modules, local SQLite storage, toggleable notifications, ten synthesized bell sounds, and a draggable focus mini timer.
+> Current release: **1.11.0** — dock shell, twelve modules, local SQLite storage, toggleable notifications, ten synthesized bell sounds, a draggable focus mini timer, and a system tray icon.
 
 ## Highlights
 
@@ -14,6 +14,7 @@ Built with WPF on .NET 5 — no WebView, no Electron, no background services, no
 - **Pins with icons** — add `.exe`, `.lnk`, `.bat`, `.cmd`, `.msc` and `.appref-ms` files (multi-select), launch with a left click, remove from the right-click menu. Choose from **181 built-in Lucide outline glyphs** or drop your own `*.svg` into `%APPDATA%\RightDock\icons`.
 - **Twelve productivity modules** — focus sessions, tasks, reminders, notes, habits, medication, health, dashboard, calendar, statistics, quick tools and learning. Compact views sit beside the dock; every module opens a full expanded window.
 - **Focus mini timer** — starting a session pops a small 176×64 draggable pill at the bottom-right with the countdown, a pin button for always-on-top, and a close button. Its position and pin state persist in `settings.json`; time turns amber while paused.
+- **System tray icon** — the Right Dock icon sits in the notification area. Left-click brings the dock back; the right-click menu keeps the dock visible, minimizes it to the tray (releasing the reserved work area), restarts it, or exits cleanly.
 - **In-app toasts** — focus completion and reminders raise a clickable toast that opens the dashboard. No Windows notification registration is required.
 - **Ten bell sounds** — focus completion rings three times and reminders ring once, each using its own selectable tone. All ten WAVs are synthesized on the device at runtime; no audio files or downloads.
 - **Local-first data** — SQLite with WAL and versioned migrations, backup/restore as a zip archive, and a restart-safe staged restore. Nothing leaves the machine.
@@ -69,6 +70,7 @@ The script writes `publish\` and `dist\RightDock-<version>-win-x64.zip`. Add `-S
 - **Change the icon** — the picker offers 181 categories icons, live search by name or category, a **This app** reset, and any SVGs you place in `%APPDATA%\RightDock\icons`.
 - **Open a module** — left-click its icon; the compact view opens beside the dock, and the expand button opens the full window. Toasts open the dashboard when clicked.
 - **Focus timer** — start a focus session and the mini timer appears at the bottom-right. Drag it anywhere by its body; the pin button toggles always-on-top; X hides it while the session keeps running. It returns on the next Start and disappears on reset or completion.
+- **Tray icon** — left-click the Right Dock icon in the notification area to bring the dock back. Right-click for **Open Right Dock**, **Minimize to tray** (releases the reserved work area until restored), **Restart Right Dock** and **Exit Right Dock**.
 - **Auto-hide** — hover the right edge of the screen to reveal the dock. Turn it off in Settings → General if you prefer it always visible.
 - **Settings** — click the gear. Six pages: **General** (auto-hide), **Appearance** (icon color presets, rainbow swatch, native color picker), **Modules** (enable/hide), **Notifications** (alerts plus focus/reminder bell pickers), **Data** (database info, backup, restore, integrity check) and **Startup** (run at Windows sign-in).
 
@@ -107,6 +109,7 @@ There is no telemetry, no account, and no network access anywhere in the applica
 RightDock/
 ├─ App.xaml(.cs)              Application bootstrap, single instance, --restart
 ├─ MainWindow.xaml(.cs)       Dock surface, pins, auto-hide, popup positioning
+├─ TrayIcon.cs                Notification-area icon and menu (open, minimize, restart, exit)
 ├─ AppBarDock.cs              AppBar registration and work-area reservation
 ├─ AppSettings.cs             settings.json load/save with validation
 ├─ PinStore.cs                pins.json load/save
@@ -148,6 +151,7 @@ Right Dock is designed to stay small while idle. Measured on Windows 11 (2560×1
 | 1.8.0 (stress run) | 150.4 MB | 98.9 MB | 0.016 s over 10 s | 476 / 9 |
 | 1.9.0 (twelve modules, idle) | 109.0 MB | 62.2 MB | 0.016 s over 10 s | 463 / 17 |
 | 1.10.0 (twelve modules + mini timer, idle) | 108.6 MB | 61.0 MB | 0.016 s over 10 s | 420 / 13 |
+| 1.11.0 (twelve modules + mini timer + tray icon, idle) | 119.8 MB | 69.9 MB | 0.016 s over 10 s | 409 / 13 |
 
 A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private / 163 MB working set with flat handle, GDI and USER counts, confirming popups are reclaimed.
 
@@ -156,7 +160,7 @@ A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private 
 | Script | Purpose |
 | --- | --- |
 | `tools\publish.ps1` | Publish win-x64, create the portable zip, optionally build the installer. |
-| `tools\ui.ps1` | UI Automation driver: list windows, screenshot, dump elements, invoke/click/set/select, send keys. |
+| `tools\ui.ps1` | UI Automation driver: list windows, screenshot, dump elements, invoke/click/right-click/set/select, send keys. |
 | `tools\measure.ps1` | Sample CPU, working set, private bytes, handles and threads. |
 | `tools\stress-ui.ps1` | Repeated open/close cycles across modules for leak checks. |
 | `tools\watch-toast.ps1` | Wait for a toast window, capture it, optionally click it. |
@@ -178,6 +182,7 @@ A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private 
 | 1.8.0 | Hardening: backup/restore, OS-event handling, installer, profiling |
 | 1.9.0 | Bell sounds for focus completion and reminders |
 | 1.10.0 | Draggable focus mini timer with pin, close and saved placement |
+| 1.11.0 | System tray icon with open, minimize, restart and exit |
 
 ## Known limitations
 

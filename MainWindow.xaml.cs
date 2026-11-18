@@ -41,6 +41,7 @@ namespace RightDock
         private bool _dockShown = true;
         private bool _suppressedByFullscreen;
         private bool _closing;
+        private bool _hiddenByTray;
         private bool _slideHides;
         private int _modalDepth;
         private int _popupCount;
@@ -241,7 +242,7 @@ namespace RightDock
 
         private void OnHoverTick(object sender, EventArgs e)
         {
-            if (_closing || _modalDepth > 0 || _popupCount > 0) return;
+            if (_closing || _hiddenByTray || _modalDepth > 0 || _popupCount > 0) return;
 
             if (_suppressedByFullscreen)
             {
@@ -639,6 +640,43 @@ namespace RightDock
             finally
             {
                 _modalDepth = Math.Max(0, _modalDepth - 1);
+            }
+        }
+
+        internal bool IsDockVisible => IsVisible && _dockShown;
+
+        internal bool CanHideToTray => !_hiddenByTray && _modalDepth == 0;
+
+        internal void MinimizeToTray()
+        {
+            if (_closing || !CanHideToTray) return;
+
+            _hiddenByTray = true;
+            _dockShown = false;
+            _hideDeadline = DateTime.MaxValue;
+            _slideTimer.Stop();
+            _modules?.ClosePopups();
+            _appBar?.Unregister();
+            Hide();
+        }
+
+        internal void RestoreFromTray()
+        {
+            if (_closing) return;
+
+            _hiddenByTray = false;
+            if (!IsVisible) Show();
+
+            if (_dockShown)
+            {
+                if (_settings.AutoHide) _hideDeadline = DateTime.UtcNow.AddMilliseconds(1600);
+                return;
+            }
+
+            ShowDock();
+            if (_dockShown && _settings.AutoHide)
+            {
+                _hideDeadline = DateTime.UtcNow.AddMilliseconds(1600);
             }
         }
 

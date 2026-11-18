@@ -1,13 +1,14 @@
 # RightDock — Implementation Progress
 
-> Release **1.10.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.11.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
 > Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
 > hardening (profiling, backup/restore, migration and OS-event tests, installer assets) +
 > Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring) +
-> Phase 8 focus mini timer (draggable pill with pin and close) complete.
-> Next up: post-1.10 maintenance (see §15 known limitations).
+> Phase 8 focus mini timer (draggable pill with pin and close) + Phase 9 system tray
+> icon (open, minimize, restart, exit) complete.
+> Next up: post-1.11 maintenance (see §16 known limitations).
 > Last updated: 2026-11-18.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -30,6 +31,7 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.8.0 | Phase 6: profiling/leak checks, migration and backup/restore tests, sleep/display handling, installer assets | ✔ Done ✔ Tested |
 | v1.9.0 | Phase 7: ten synthesized bell sounds, three-ring focus completion, one-ring reminders, sound pickers in Settings | ✔ Done ✔ Tested |
 | v1.10.0 | Phase 8: draggable focus mini timer with pin, close, persisted placement | ✔ Done ✔ Tested |
+| v1.11.0 | Phase 9: system tray icon with open, minimize, restart and exit | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, README, GitHub repository | ✔ Done |
 
 ---
@@ -727,7 +729,60 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 13. Documentation and repository (completed)
+## 13. v1.11.0 — Phase 9 system tray icon (completed, tested)
+
+### Icon and menu (`TrayIcon.cs`)
+- Created after the dock window is shown: a WinForms `NotifyIcon` carrying the
+  executable's own icon (`ExtractAssociatedIcon`), the tooltip "Right Dock", and a
+  `ContextMenuStrip` rendered with a dark color table (`#1C1C1C` background, translucent
+  hover, matching border and separators) so it matches the dock surface.
+- Left-clicking the icon restores the dock. The menu holds **Open Right Dock**,
+  **Minimize to tray**, a separator, **Restart Right Dock** and **Exit Right Dock**.
+- Enabled state is recomputed whenever the menu opens: Open is disabled while the dock is
+  visible; Minimize is disabled while it is already in the tray or a modal dialog is open.
+- The icon runs on the WPF UI thread. `UseWindowsForms` was already enabled in the
+  project, so no new dependency was added; the rest of the app remains WPF.
+
+### Dock integration (`MainWindow`)
+- `MinimizeToTray()` sets a hidden flag, closes module popups, unregisters the AppBar
+  (maximized windows regain the full width), hides the window and stops edge reveal while
+  the flag is set.
+- `RestoreFromTray()` clears the flag, shows the window if needed and re-reserves the
+  AppBar through `ShowDock()`, giving a 1.6 s peek when auto-hide is enabled.
+- Restart starts the executable with `--restart` and lets the existing single-instance
+  mutex handoff take over; Exit calls `Application.Shutdown()`. `App.OnExit` disposes the
+  tray icon before the services.
+
+### Verification tooling
+- `tools/ui.ps1` gained `rightclickxy`, and `clickglobal`/`invokeglobal` now work without
+  a `-Window` argument, which the tray menu checks rely on.
+
+### Verified on a live Windows 11 session
+- The published build showed the app icon in the notification overflow with the
+  "Right Dock" tooltip; the icon artwork matched the executable's icon.
+- Right-clicking opened the dark four-item menu. With the dock visible, **Open** was
+  disabled and **Minimize** enabled.
+- **Minimize to tray** removed the "Right Dock" window from the visible-window list and
+  the work area widened from 2498 to 2560 px. Hovering the right screen edge for two
+  seconds did not reveal the dock. A left-click on the tray icon restored it and the work
+  area returned to 2498 px.
+- **Restart Right Dock** ended the old process and started a new one with the dock
+  visible and the work area reserved; only one process remained.
+- **Exit Right Dock** terminated the process, removed the icon and restored the full work
+  area of 2560 px. Closing the dock normally while the icon was active also exited.
+- Published 1.11.0 reports FileVersion 1.11.0.0; `dist\RightDock-1.11.0-win-x64.zip`
+  holds 37 entries. Settled idle baseline: 119.8 MB working set, 69.9 MB private,
+  0.016 CPU seconds over 10 s, 409 handles, 13 threads.
+- No test data was written to the database; only window and work-area state changed.
+
+### Baseline impact
+- About 11 MB more working set and 9 MB more private bytes than 1.10.0, because the
+  WinForms notification-area stack loads on demand; CPU, handle and thread counts stay
+  effectively flat.
+
+---
+
+## 14. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -737,20 +792,20 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 14. Measured resource baseline
+## 15. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
 visible, all twelve modules registered, no popups open, 10 s idle sample with
-`tools/measure.ps1`, fresh 1.10.0 process):
+`tools/measure.ps1`, fresh 1.11.0 process):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 108.6 MB |
-| Private bytes | 61.0 MB |
+| Working set | 119.8 MB |
+| Private bytes | 69.9 MB |
 | Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
-| Handles / threads | 420 / 13 |
-| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing; mini timer redraws on the focus tick and exists only during a session |
+| Handles / threads | 409 / 13 |
+| Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing; mini timer redraws on the focus tick and exists only during a session; the tray icon has no timer and reacts to shell messages |
 | Audio | WAV rendered and cached on the first ring; no audio buffers while idle |
 | Database | one SQLite connection (WAL), no background threads |
 | Network | none |
@@ -767,13 +822,14 @@ Baseline progression: 1.2.0 launcher-only ≈76 MB working set / ≈58 MB privat
 opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB / 71.5 MB /
 0.047 CPU seconds over 30 s; 1.8.0 post-stress 150.4 MB / 98.9 MB / 0.016 CPU seconds
 over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s; 1.10.0 fresh
-108.6 MB / 61.0 MB / 0.016 CPU seconds over 10 s. The 1.8.0
-sample was taken after the stress run, so WPF's retained views are included; 1.9.0 was
-measured on a freshly started published process.
+108.6 MB / 61.0 MB / 0.016 CPU seconds over 10 s; 1.11.0 fresh 119.8 MB / 69.9 MB /
+0.016 CPU seconds over 10 s. The 1.8.0 sample was taken after the stress run, so WPF's
+retained views are included; 1.9.0–1.11.0 were measured on freshly started published
+processes.
 
 ---
 
-## 15. Known limitations (current release)
+## 16. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -849,7 +905,7 @@ measured on a freshly started published process.
 
 ---
 
-## 16. Pending roadmap
+## 17. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -909,12 +965,17 @@ measured on a freshly started published process.
 - [x] Pin toggles always-on-top and persists; close hides it for the session.
 - [x] Position persists, and reset/completion/deactivation hide it.
 
+### Phase 9 — System tray icon (completed in 1.11.0)
+- [x] Right Dock icon in the notification area with the app's own artwork.
+- [x] Left-click restores the dock; menu minimizes to tray, restarts and exits.
+- [x] Minimizing releases the AppBar reservation and suppresses edge reveal until restored.
+
 ---
 
-## 17. Acceptance criteria tracking
+## 18. Acceptance criteria tracking
 
 From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5,
-28 Phase 7 and 29 Phase 8):
+28 Phase 7, 29 Phase 8 and 30 Phase 9):
 
 | # | Criterion | Status |
 | --- | --- | --- |
@@ -947,10 +1008,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 27 | Quick Tools contains exactly three tools | ✔ Tested (note capture, breathing, screen break only) |
 | 28 | Focus and reminder bells differ, ring three times / once, and offer ten choices each | ✔ Tested (ten pickers with previews, `glass` focus ×3 and `musicbox` reminder ×1 in the log, persistence across restart) |
 | 29 | Focus shows a small draggable timer with pin and close while a session runs | ✔ Tested (auto-show, drag with saved position, pin/topmost, paused color, hide on close/reset, clean dock exit) |
+| 30 | Tray icon can minimize, reopen, restart and exit the app cleanly | ✔ Tested (overflow icon, dark menu, work-area release on minimize, single-instance restart, icon removal on exit) |
 
 ---
 
-## 18. Test method notes
+## 19. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -981,6 +1043,12 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   does not raise WPF `Click`, so handlers (priority/repeat/filter chips, round
   checkboxes) do not run. Use real mouse clicks (`SetCursorPos` + `mouse_event`) or
   `InvokePattern` where applicable.
+- **The tray icon is outside the dock's UIA tree** — it lives in the notification area
+  (Windows 11 puts new icons in the overflow). Open it with
+  `clickglobal -Name "Show Hidden Icons"`; the icon's button is named "Right Dock" with
+  class `SystemTray.NormalButton`. The WinForms menu is a separate titleless top-level
+  HWND: `rightclickxy` opens it and its items are located by name globally. Work-area
+  changes are read from `Screen.PrimaryScreen.WorkingArea` after `SetProcessDPIAware`.
 - **The focus mini timer is its own top-level window** titled "Focus timer", outside the
   dock's UIA tree, with automation IDs `MiniTimerTime`, `MiniTimerPinButton` and
   `MiniTimerCloseButton`. Drag checks use `SetCursorPos` + `mouse_event` while
