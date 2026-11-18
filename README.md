@@ -4,13 +4,13 @@ A native, single-process productivity dock for the right edge of Windows. Right 
 
 Built with WPF on .NET 5 — no WebView, no Electron, no background services, no network calls.
 
-> Current release: **1.11.0** — dock shell, twelve modules, local SQLite storage, toggleable notifications, ten synthesized bell sounds, a draggable focus mini timer, and a system tray icon.
+> Current release: **1.11.1** — dock shell, twelve modules, local SQLite storage, toggleable notifications, ten synthesized bell sounds, a draggable focus mini timer, a system tray icon, and reliable return from fullscreen apps.
 
 ## Highlights
 
 - **True AppBar reservation** — the dock registers with the Windows shell (`ABM_NEW` / `QUERYPOS` / `SETPOS`), so maximized windows stop at the dock edge. When auto-hide slides the dock out, the reserved area is released.
 - **Always-on-top, non-activating** — `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`; the dock never steals focus and has no taskbar button.
-- **Auto-hide with edge reveal** — hover the rightmost 5 px of the screen to slide the dock in; it slides away after the cursor leaves. Fullscreen apps hide it automatically, menus and dialogs pause it.
+- **Auto-hide with edge reveal** — hover the rightmost 5 px of the screen to slide the dock in; it slides away after the cursor leaves. Fullscreen apps hide it automatically and it comes back when fullscreen ends, like the taskbar; menus and dialogs pause it.
 - **Pins with icons** — add `.exe`, `.lnk`, `.bat`, `.cmd`, `.msc` and `.appref-ms` files (multi-select), launch with a left click, remove from the right-click menu. Choose from **181 built-in Lucide outline glyphs** or drop your own `*.svg` into `%APPDATA%\RightDock\icons`.
 - **Twelve productivity modules** — focus sessions, tasks, reminders, notes, habits, medication, health, dashboard, calendar, statistics, quick tools and learning. Compact views sit beside the dock; every module opens a full expanded window.
 - **Focus mini timer** — starting a session pops a small 176×64 draggable pill at the bottom-right with the countdown, a pin button for always-on-top, and a close button. Its position and pin state persist in `settings.json`; time turns amber while paused.
@@ -152,6 +152,7 @@ Right Dock is designed to stay small while idle. Measured on Windows 11 (2560×1
 | 1.9.0 (twelve modules, idle) | 109.0 MB | 62.2 MB | 0.016 s over 10 s | 463 / 17 |
 | 1.10.0 (twelve modules + mini timer, idle) | 108.6 MB | 61.0 MB | 0.016 s over 10 s | 420 / 13 |
 | 1.11.0 (twelve modules + mini timer + tray icon, idle) | 119.8 MB | 69.9 MB | 0.016 s over 10 s | 409 / 13 |
+| 1.11.1 (fullscreen recovery fix, idle) | 117.0 MB | 63.4 MB | 0.016 s over 10 s | 436 / 10 |
 
 A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private / 163 MB working set with flat handle, GDI and USER counts, confirming popups are reclaimed.
 
@@ -165,6 +166,7 @@ A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private 
 | `tools\stress-ui.ps1` | Repeated open/close cycles across modules for leak checks. |
 | `tools\watch-toast.ps1` | Wait for a toast window, capture it, optionally click it. |
 | `tools\close-dock.ps1` | Gracefully close a running instance. |
+| `tools\simulate-fullscreen.ps1` | Post the AppBar fullscreen notification (`-State on\|off`) to test dock suppression without a video player. |
 | `tools\make-icon.ps1`, `tools\gen-icons.js` | Regenerate the application icon and the built-in icon catalog. |
 
 ## Version history
@@ -183,6 +185,7 @@ A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private 
 | 1.9.0 | Bell sounds for focus completion and reminders |
 | 1.10.0 | Draggable focus mini timer with pin, close and saved placement |
 | 1.11.0 | System tray icon with open, minimize, restart and exit |
+| 1.11.1 | Fullscreen recovery: dock returns after fullscreen videos, never overlaps them |
 
 ## Known limitations
 

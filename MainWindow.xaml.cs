@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -42,6 +44,8 @@ namespace RightDock
         private bool _suppressedByFullscreen;
         private bool _closing;
         private bool _hiddenByTray;
+        private bool _keepShownUntilHover;
+        private DateTime _fullscreenSince = DateTime.MinValue;
         private bool _slideHides;
         private int _modalDepth;
         private int _popupCount;
@@ -229,6 +233,8 @@ namespace RightDock
         {
             Services.Log.Info("Fullscreen suppression: " + isFullscreen);
             _suppressedByFullscreen = isFullscreen;
+            _fullscreenSince = isFullscreen ? DateTime.UtcNow : DateTime.MinValue;
+            _keepShownUntilHover = false;
 
             if (isFullscreen)
             {
@@ -246,8 +252,15 @@ namespace RightDock
 
             if (_suppressedByFullscreen)
             {
-                if (_dockShown) HideDock();
-                return;
+                bool settled = (DateTime.UtcNow - _fullscreenSince).TotalMilliseconds > 700;
+                if (!settled || IsFullscreenOnDockMonitor())
+                {
+                    if (_dockShown) HideDock();
+                    return;
+                }
+
+                Services.Log.Info("Fullscreen app ended; releasing dock suppression.");
+                _suppressedByFullscreen = false;
             }
 
             if (!_settings.AutoHide)
@@ -270,6 +283,17 @@ namespace RightDock
                 && pt.Y <= _currentTop + _currentHeight + RevealMargin;
 
             bool wantShow = atEdge || overDock;
+
+            if (_keepShownUntilHover)
+            {
+                if (!wantShow)
+                {
+                    _hideDeadline = DateTime.MaxValue;
+                    return;
+                }
+
+                _keepShownUntilHover = false;
+            }
 
             if (wantShow)
             {
@@ -370,6 +394,46 @@ namespace RightDock
         private double GetDpiScale()
         {
             return VisualTreeHelper.GetDpi(this).DpiScaleX;
+        }
+
+        private bool IsFullscreenOnDockMonitor()
+        {
+            IntPtr foreground = NativeMethods.GetForegroundWindow();
+            if (foreground == IntPtr.Zero || foreground == _hwnd) return false;
+
+            NativeMethods.GetWindowThreadProcessId(foreground, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return false;
+
+            var className = new StringBuilder(64);
+            NativeMethods.GetClassName(foreground, className, className.Capacity);
+            string name = className.ToString();
+            if (name == "Progman" || name == "WorkerW"
+                || name == "Shell_TrayWnd" || name == "Shell_SecondaryTrayWnd")
+            {
+                return false;
+            }
+
+            // Fullscreen videos and players are borderless; maximized windows keep a caption.
+            long style = NativeMethods.GetWindowLongPtr(foreground, NativeMethods.GWL_STYLE).ToInt64();
+            if ((style & NativeMethods.WS_CAPTION) != 0) return false;
+
+            if (!NativeMethods.GetWindowRect(foreground, out NativeMethods.RECT rect)) return false;
+
+            IntPtr monitor = NativeMethods.MonitorFromWindow(foreground, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            if (monitor != NativeMethods.MonitorFromWindow(_hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST))
+            {
+                return false;
+            }
+
+            var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return false;
+
+            const int tolerance = 2;
+            NativeMethods.RECT bounds = info.rcMonitor;
+            return rect.Left <= bounds.Left + tolerance
+                && rect.Top <= bounds.Top + tolerance
+                && rect.Right >= bounds.Right - tolerance
+                && rect.Bottom >= bounds.Bottom - tolerance;
         }
 
         private void RebuildButtons()
@@ -652,6 +716,7 @@ namespace RightDock
             if (_closing || !CanHideToTray) return;
 
             _hiddenByTray = true;
+            _keepShownUntilHover = false;
             _dockShown = false;
             _hideDeadline = DateTime.MaxValue;
             _slideTimer.Stop();
@@ -664,20 +729,25 @@ namespace RightDock
         {
             if (_closing) return;
 
+            if (_suppressedByFullscreen)
+            {
+                if (IsFullscreenOnDockMonitor())
+                {
+                    Services.Log.Info("Tray restore skipped; a fullscreen app is active.");
+                    return;
+                }
+
+                _suppressedByFullscreen = false;
+            }
+
             _hiddenByTray = false;
             if (!IsVisible) Show();
 
-            if (_dockShown)
-            {
-                if (_settings.AutoHide) _hideDeadline = DateTime.UtcNow.AddMilliseconds(1600);
-                return;
-            }
+            if (!_dockShown) ShowDock();
+            if (!_dockShown) return;
 
-            ShowDock();
-            if (_dockShown && _settings.AutoHide)
-            {
-                _hideDeadline = DateTime.UtcNow.AddMilliseconds(1600);
-            }
+            _keepShownUntilHover = true;
+            _hideDeadline = DateTime.MaxValue;
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)

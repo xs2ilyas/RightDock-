@@ -1,14 +1,15 @@
 # RightDock — Implementation Progress
 
-> Release **1.11.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.11.1** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
 > Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
 > hardening (profiling, backup/restore, migration and OS-event tests, installer assets) +
 > Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring) +
 > Phase 8 focus mini timer (draggable pill with pin and close) + Phase 9 system tray
-> icon (open, minimize, restart, exit) complete.
-> Next up: post-1.11 maintenance (see §16 known limitations).
+> icon (open, minimize, restart, exit) + fullscreen recovery (dock returns after videos)
+> complete.
+> Next up: post-1.11 maintenance (see §17 known limitations).
 > Last updated: 2026-11-18.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -32,6 +33,7 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.9.0 | Phase 7: ten synthesized bell sounds, three-ring focus completion, one-ring reminders, sound pickers in Settings | ✔ Done ✔ Tested |
 | v1.10.0 | Phase 8: draggable focus mini timer with pin, close, persisted placement | ✔ Done ✔ Tested |
 | v1.11.0 | Phase 9: system tray icon with open, minimize, restart and exit | ✔ Done ✔ Tested |
+| v1.11.1 | Fullscreen recovery: reliable return after fullscreen apps, no video overlap | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, README, GitHub repository | ✔ Done |
 
 ---
@@ -782,7 +784,58 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 14. Documentation and repository (completed)
+## 14. v1.11.1 — Fullscreen recovery fix (completed, tested)
+
+### Problem
+Windows sends `ABN_FULLSCREENAPP` (`lParam = 1/0`) when a fullscreen window appears or
+ends, but browsers and video players often exit fullscreen without the matching "ended"
+notification. `_suppressedByFullscreen` then stayed set: the dock stayed off-screen, and
+restoring it from the tray showed it for a moment before the next hover tick hid it
+again ("comes and goes"). Only a restart recovered.
+
+### Fix (`MainWindow`, `NativeMethods`)
+- `OnFullscreenChanged` records `_fullscreenSince` and clears `_keepShownUntilHover`.
+  While suppression is set, each 110 ms hover tick waits 700 ms for the shell to settle,
+  then calls `IsFullscreenOnDockMonitor()`. If no fullscreen app owns the dock's monitor,
+  the flag is cleared ("Fullscreen app ended; releasing dock suppression.") and the
+  normal shown/hidden logic resumes; with auto-hide off the dock re-appears immediately.
+- `IsFullscreenOnDockMonitor()` checks the real foreground window: it skips the dock's
+  own process and the shell classes (`Progman`, `WorkerW`, `Shell_TrayWnd`,
+  `Shell_SecondaryTrayWnd`), ignores windows that still carry `WS_CAPTION` (maximized
+  windows), requires the window to be on the same monitor as the dock, and requires its
+  rectangle to cover `rcMonitor` within a 2 px tolerance — the same rule the taskbar uses.
+- `RestoreFromTray()` skips while a fullscreen app is genuinely active (the dock would
+  flash under the video) and clears a stale suppression flag otherwise.
+- A tray-restored dock sets `_keepShownUntilHover`; with auto-hide enabled it stays
+  visible with no hide deadline until the pointer actually reaches the reveal zone or the
+  dock, so a restore can no longer vanish before the click.
+- `NativeMethods` gained `GetForegroundWindow`, `GetWindowRect`, `GetWindowThreadProcessId`,
+  `GetClassName`, `GWL_STYLE` and `WS_CAPTION`.
+
+### Verification tooling
+- `tools/simulate-fullscreen.ps1` posts the registered AppBar callback with `lParam`
+  1 (`-State on`) or 0 (`-State off`) to the dock HWND, so suppression can be driven
+  without a player. Real tests used a borderless 2560×1600 WinForms window and Edge F11.
+
+### Verified on a live Windows 11 session
+- Simulated `on` with no fullscreen app: dock hid, then the tick released suppression at
+  +0.7 s and the work area returned to 2498 px with no user action.
+- Borderless topmost and non-topmost 2560×1600 windows: work area stayed at 2560 px and
+  no release was logged while the window was open; closing it returned the dock in every
+  run (12:24:26, 12:26:21 and 12:28:11 in the session log).
+- Edge F11 on a local page: window rect 0,0 2560×1600, class `Chrome_WidgetWin_1`, no
+  caption, work area 2560 px; leaving fullscreen released suppression ~3 s later and the
+  work area returned to 2498 px — the reported YouTube-style scenario, no restart.
+- Temporarily enabling auto-hide, then **Open Right Dock** with the pointer away from the
+  edge: the dock stayed visible for the whole check; hovering it and moving away hid it
+  after the 650 ms delay. The original `settings.json` was restored afterwards.
+- Notes popup smoke test passed; the tray icon and tray menu from 1.11.0 still worked.
+- Note: during a real fullscreen app the shell auto-hides the taskbar, so the tray icon is
+  not reachable until fullscreen ends; the guard covers the case where it is invoked.
+
+---
+
+## 15. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -792,19 +845,19 @@ sound saves it, plays a preview and updates the status.
 
 ---
 
-## 15. Measured resource baseline
+## 16. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
 visible, all twelve modules registered, no popups open, 10 s idle sample with
-`tools/measure.ps1`, fresh 1.11.0 process):
+`tools/measure.ps1`, fresh 1.11.1 process):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 119.8 MB |
-| Private bytes | 69.9 MB |
+| Working set | 117.0 MB |
+| Private bytes | 63.4 MB |
 | Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
-| Handles / threads | 409 / 13 |
+| Handles / threads | 436 / 10 |
 | Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing; mini timer redraws on the focus tick and exists only during a session; the tray icon has no timer and reacts to shell messages |
 | Audio | WAV rendered and cached on the first ring; no audio buffers while idle |
 | Database | one SQLite connection (WAL), no background threads |
@@ -823,16 +876,21 @@ opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB 
 0.047 CPU seconds over 30 s; 1.8.0 post-stress 150.4 MB / 98.9 MB / 0.016 CPU seconds
 over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s; 1.10.0 fresh
 108.6 MB / 61.0 MB / 0.016 CPU seconds over 10 s; 1.11.0 fresh 119.8 MB / 69.9 MB /
-0.016 CPU seconds over 10 s. The 1.8.0 sample was taken after the stress run, so WPF's
-retained views are included; 1.9.0–1.11.0 were measured on freshly started published
-processes.
+0.016 CPU seconds over 10 s; 1.11.1 fresh 117.0 MB / 63.4 MB / 0.016 CPU seconds over
+10 s. The 1.8.0 sample was taken after the stress run, so WPF's retained views are
+included; 1.9.0–1.11.1 were measured on freshly started published processes.
 
 ---
 
-## 16. Known limitations (current release)
+## 17. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
+- **Fullscreen detection is foreground-window based** — only a borderless window that
+  covers the whole monitor hosting the dock suppresses it; a maximized player or a
+  fullscreen app on another monitor does not. While a fullscreen app is active Windows
+  auto-hides the taskbar, so the tray icon cannot be clicked until fullscreen ends; the
+  dock then returns on its own.
 - **Hover polling** — 110 ms `GetCursorPos` instead of event hooks; kept after the Phase 6
   review because CPU cost measured at 0.016 CPU seconds over 10 s idle.
 - **No pin reordering** — order is insertion order; drag-to-reorder is pending.
@@ -905,7 +963,7 @@ processes.
 
 ---
 
-## 17. Pending roadmap
+## 18. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -972,10 +1030,10 @@ processes.
 
 ---
 
-## 18. Acceptance criteria tracking
+## 19. Acceptance criteria tracking
 
 From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5,
-28 Phase 7, 29 Phase 8 and 30 Phase 9):
+28 Phase 7, 29 Phase 8, 30 Phase 9 and 31 the 1.11.1 fullscreen fix):
 
 | # | Criterion | Status |
 | --- | --- | --- |
@@ -1009,10 +1067,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 28 | Focus and reminder bells differ, ring three times / once, and offer ten choices each | ✔ Tested (ten pickers with previews, `glass` focus ×3 and `musicbox` reminder ×1 in the log, persistence across restart) |
 | 29 | Focus shows a small draggable timer with pin and close while a session runs | ✔ Tested (auto-show, drag with saved position, pin/topmost, paused color, hide on close/reset, clean dock exit) |
 | 30 | Tray icon can minimize, reopen, restart and exit the app cleanly | ✔ Tested (overflow icon, dark menu, work-area release on minimize, single-instance restart, icon removal on exit) |
+| 31 | Dock returns after fullscreen videos without a restart and never covers them | ✔ Tested (watchdog release at +0.7 s, hidden for borderless 2560×1600 windows and Edge F11, work area 2560→2498 px automatically, tray restore guard) |
 
 ---
 
-## 19. Test method notes
+## 20. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -1049,6 +1108,14 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   class `SystemTray.NormalButton`. The WinForms menu is a separate titleless top-level
   HWND: `rightclickxy` opens it and its items are located by name globally. Work-area
   changes are read from `Screen.PrimaryScreen.WorkingArea` after `SetProcessDPIAware`.
+- **Fullscreen suppression is tested with `tools/simulate-fullscreen.ps1`** — it posts the
+  registered `RightDock_AppBarCallback` message with `lParam = 1` (on) or `0` (off) to the
+  dock HWND. A genuine fullscreen check needs a borderless window covering the monitor
+  (a WinForms form with `FormBorderStyle=None` at 0,0 2560×1600, or Edge/Chrome F11).
+  While such a window is up the shell hides the taskbar, so tray clicks are impossible;
+  send F11 again or close the window and watch `rightdock.log` for "Fullscreen app ended;
+  releasing dock suppression." A maximized window has `WS_CAPTION`, so it must not
+  suppress the dock.
 - **The focus mini timer is its own top-level window** titled "Focus timer", outside the
   dock's UIA tree, with automation IDs `MiniTimerTime`, `MiniTimerPinButton` and
   `MiniTimerCloseButton`. Drag checks use `SetCursorPos` + `mouse_event` while
@@ -1085,7 +1152,8 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   (list/shot/elements/invoke/set/click/clickxy/keys/expand/collapse/select/selected),
   `watch-toast.ps1` (toast capture/click), `close-dock.ps1` (clean shutdown between runs),
   `measure.ps1` (CPU/RAM/handle sample), `stress-ui.ps1` (repeat open/close with leak
-  metrics), `publish.ps1` (release/portable ZIP/installer) and `make-icon.ps1`.
+  metrics), `simulate-fullscreen.ps1` (AppBar fullscreen callback on/off),
+  `publish.ps1` (release/portable ZIP/installer) and `make-icon.ps1`.
 - Phase 6 backup/restore tests used the real dialogs: `CreateBackupButton` →
   `SendKeys` path + Enter, `RestoreBackupButton` → path + Enter → message-box Enter. The
   archive was re-opened with Python `zipfile`/`sqlite3` to check entries, journal mode,

@@ -16,6 +16,55 @@ picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
 
 ---
 
+## [1.11.1] — 2026-11-18 — Fullscreen recovery fix
+
+### Fixed
+- **Dock no longer stays lost after a fullscreen video or browser.** The shell does not
+  always send the `ABN_FULLSCREENAPP` "ended" notification when a player leaves
+  fullscreen, which left the dock suppressed until a restart. The 110 ms hover tick now
+  re-checks the foreground window and releases stale suppression about 0.7 s after no
+  fullscreen app owns the dock's monitor.
+- **Fullscreen is confirmed against the real foreground window** (`IsFullscreenOnDockMonitor`):
+  a borderless window (no `WS_CAPTION`), covering the whole monitor that hosts the dock,
+  excluding the shell desktop/taskbar classes and the dock's own process. Maximized
+  windows keep their caption and are ignored, so an ordinary maximize never hides it.
+- **Tray Open while a fullscreen app is running** is ignored instead of showing the dock
+  under the video only to hide it again; a leftover suppression flag is cleared when the
+  dock is restored normally.
+- **Tray-restored dock with auto-hide enabled** stays visible until the pointer actually
+  reaches it, instead of auto-hiding before the user can click a module.
+
+### Added
+- `tools/simulate-fullscreen.ps1` posts the AppBar `ABN_FULLSCREENAPP` callback to the
+  running dock (`-State on|off`), making fullscreen handling testable deterministically.
+
+### Changed
+- Version 1.11.1.
+
+### Verified
+- With no fullscreen app, a simulated `ABN_FULLSCREENAPP` on hid the dock and the hover
+  tick released the suppression ~0.7 s later ("Fullscreen app ended; releasing dock
+  suppression." in the log); the work area returned to 2498 px without user action.
+- A real borderless 2560×1600 window kept the dock hidden (work area 2560 px) for the
+  whole session; closing the window returned the dock automatically each time.
+- A real Edge F11 fullscreen over a local page hid the dock, and leaving fullscreen
+  brought it back within ~3 s with no restart — the reported YouTube-style scenario.
+- With auto-hide temporarily enabled, **Open Right Dock** from the tray kept the dock
+  visible while the pointer stayed away; hovering the dock and then moving away hid it
+  after the 650 ms delay. The user's settings file was restored afterwards.
+- Notes popup open/close smoke test passed; only the publish build was used.
+- Published 1.11.1 reports FileVersion 1.11.1.0; `dist\RightDock-1.11.1-win-x64.zip`
+  holds 37 entries. Settled idle baseline: 117.0 MB working set, 63.4 MB private,
+  0.016 CPU seconds over 10 s, 436 handles, 10 threads.
+
+### Files
+- Added: `tools/simulate-fullscreen.ps1`.
+- Changed: `MainWindow.xaml.cs`, `NativeMethods.cs`, `RightDock.csproj`,
+  `installer/RightDock.iss`, `README.md`, `PROJECT_ARCHITECTURE.md`,
+  `IMPLEMENTATION_PROGRESS.md`.
+
+---
+
 ## [1.11.0] — 2026-11-18 — Phase 9 system tray icon
 
 ### Added

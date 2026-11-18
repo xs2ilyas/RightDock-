@@ -1,8 +1,9 @@
 # RightDock — Project Architecture
 
-> Current release: **1.7.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
+> Current release: **1.11.1** (launcher + Phase 1 infrastructure + Phase 2 productivity
 > modules + Phase 3 personal tracking + Phase 4 planning and insight + Phase 5 quick
-> tools and learning)
+> tools and learning + Phase 6 hardening + Phase 7 bell sounds + Phase 8 focus mini
+> timer + Phase 9 system tray icon + fullscreen recovery)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
@@ -182,7 +183,7 @@ both on close and while the dock is auto-hidden.
 | Notification | Reaction |
 | --- | --- |
 | `ABN_POSCHANGED` | Re-reserve and re-place the window unless a reserve just happened (< 250 ms `WithinRecentReserve` guard against self-triggered loops) |
-| `ABN_FULLSCREENAPP` | Suppress/hide the dock while a fullscreen app owns the monitor; resume a delayed hide when it ends |
+| `ABN_FULLSCREENAPP` | Suppress/hide the dock while a fullscreen app owns the monitor; a missing "ended" notification is recovered by the hover-tick watchdog (§4.4) |
 
 `WM_DISPLAYCHANGE` and `WM_DPICHANGED` also trigger `RefreshGeometry()`; DPI scale is
 re-read from `wParam` so the physical width stays 50 DIP.
@@ -193,6 +194,28 @@ re-read from `wParam` so the physical width stays 50 DIP.
 (`_currentLeft/Top/Width/Height`) used by hit-testing. `SlideTo` animates the left edge
 with a 16 ms `DispatcherTimer` over 170 ms using a cubic ease-out
 (`1 − (1−t)³`). The timer runs only while an animation is in progress.
+
+### 4.4 Fullscreen suppression and recovery (1.11.1)
+
+The shell's `ABN_FULLSCREENAPP` pair is not guaranteed: browsers and players frequently
+leave fullscreen without the "ended" notification, which used to strand
+`_suppressedByFullscreen` until a restart. Two rules keep the dock in sync with the
+taskbar:
+
+- **Watchdog** — while suppressed, every 110 ms hover tick waits 700 ms for the shell to
+  settle and then calls `IsFullscreenOnDockMonitor()`. If no fullscreen app is on the
+  dock's monitor, the flag is cleared ("Fullscreen app ended; releasing dock
+  suppression.") and the normal show/hide policy runs; with auto-hide off the dock
+  re-reserves within one tick.
+- **Foreground confirmation** — the helper asks `GetForegroundWindow`, skips the dock's
+  own process and the shell classes (`Progman`, `WorkerW`, `Shell_TrayWnd`,
+  `Shell_SecondaryTrayWnd`), rejects windows with `WS_CAPTION` (so maximized windows do
+  not count), requires the same monitor as the dock (`MonitorFromWindow` +
+  `MONITOR_DEFAULTTONEAREST`) and a window rect covering `rcMonitor` within 2 px.
+- Tray Open is ignored while a real fullscreen app is active and clears a stale flag
+  otherwise. A restored dock sets `_keepShownUntilHover`, so with auto-hide on it stays
+  visible until the pointer reaches it. `tools/simulate-fullscreen.ps1` posts the AppBar
+  callback for testing (`-State on|off`).
 
 ---
 
@@ -222,7 +245,7 @@ States and transitions:
 | Space release | `ABM_REMOVE` only after the slide completes (`CompleteHide`) |
 | Space reclaim | `Reserve()` before the slide-in (`ShowDock`) |
 | Auto-hide disabled | Dock forced shown and reserved; hides are cancelled |
-| Fullscreen app | Always wins: dock hides and stays hidden until `ABN_FULLSCREENAPP=false` |
+| Fullscreen app | Hides the dock; stays hidden while the watchdog finds a borderless window covering the dock monitor, and returns within ~0.7 s after it ends (§4.4) |
 | Modal popups | Context menu, file dialog, icon picker and settings increment `_modalDepth`, freezing hide logic |
 | Module popups | `PopupHost.OpenCountChanged` updates `_popupCount`; the dock stays revealed while any compact/expanded popup is open |
 | Re-entrancy | `_dockShown` flag + `_slideHides` flag; slide timer restarted per transition |
@@ -364,7 +387,7 @@ module keeps its row and all module data intact.
 | Display change | `WM_DISPLAYCHANGE` → re-read monitor rect and re-reserve |
 | Sleep / resume | `WM_POWERBROADCAST` (`PBT_APMRESUMEAUTOMATIC`, `PBT_APMRESUMESUSPEND`) → scheduler reconcile + re-reserve |
 | Clock change | `WM_TIMECHANGE` → scheduler reconcile |
-| Fullscreen detection | `ABN_FULLSCREENAPP` from the shell |
+| Fullscreen detection | `ABN_FULLSCREENAPP` from the shell, plus a foreground-window watchdog for missing "ended" notifications (§4.4) |
 | Notifications | In-app `ToastWindow` cards (the tray icon controls the app, not alerts) |
 | Tray icon | WinForms `NotifyIcon` with the exe icon and a dark context menu; Restart reuses the `--restart` handoff |
 | Backup / restore | ZIP archive with manifest, staged restore applied before DB open, safety copy |
@@ -445,7 +468,8 @@ open the database while the old process is still shutting down; a duplicate star
   no session running) idles at **108.6 MB working set, 61.0 MB private, 0.016 CPU seconds
   over 10 s, 420 handles, 13 threads**; 1.11.0 with the tray icon active idles at
   **119.8 MB working set, 69.9 MB private, 0.016 CPU seconds over 10 s, 409 handles,
-  13 threads**. Bell streams are created on the first ring and cached per selected tone,
+  13 threads**; 1.11.1 idles at **117.0 MB working set, 63.4 MB private, 0.016 CPU
+  seconds over 10 s, 436 handles, 10 threads**. Bell streams are created on the first ring and cached per selected tone,
   so an idle session holds no audio buffers; the mini timer window is created only when a
   focus session starts and redraws on the existing 1 s focus tick; the tray icon has no
   timer and wakes only for shell messages (the on-demand WinForms notification-area stack
@@ -483,6 +507,7 @@ Release tooling:
 | `tools/make-icon.ps1` | Draws the 256 px dock glyph and writes `Resources\RightDock.ico` with seven PNG-compressed sizes (16–256) |
 | `tools/measure.ps1` | Samples working set, private bytes, CPU seconds/percent, handles and threads over a fixed window |
 | `tools/stress-ui.ps1` | Invokes every module button twice per cycle, then reports private/working set, handle, GDI and USER deltas |
+| `tools/simulate-fullscreen.ps1` | Posts the AppBar fullscreen callback (`-State on\|off`) to the running dock HWND for deterministic suppression tests |
 
 The installer is Inno Setup 6 (`installer/RightDock.iss`): per-user install under
 `{autopf}\RightDock`, x64, Windows 10 1809+, Start Menu and optional desktop icons,
@@ -829,7 +854,9 @@ new package or process is involved.
   the AppBar, hides the window and makes the hover poll return early, so edge reveal
   cannot bring back a dock the user deliberately put away.
 - `RestoreFromTray()` clears the flag, shows and re-reserves through `ShowDock()`, and
-  gives a 1.6 s preview when auto-hide is on.
+  gives a 1.6 s preview when auto-hide is on. Since 1.11.1 it refuses while a real
+  fullscreen app is active and keeps the dock shown until the pointer reaches it
+  (`_keepShownUntilHover`), so a restore cannot flash and vanish (§4.4).
 - Restart uses `Process.Start(exe, "--restart")` with the existing mutex handoff; Exit
   calls `Application.Shutdown()`. `App.OnExit` disposes the icon before the services.
 
@@ -854,6 +881,7 @@ stay compatible and default safely; the window is 560×560 with six tabs.
 | 7 | Ten synthesized bell sounds, triple focus ring, single reminder ring, sound pickers | ✔ Done ✔ Tested (1.9.0) |
 | 8 | Draggable focus mini timer with pin, close, paused state and persisted placement | ✔ Done ✔ Tested (1.10.0) |
 | 9 | System tray icon with open, minimize to tray, restart and exit | ✔ Done ✔ Tested (1.11.0) |
+| 10 | Fullscreen suppression watchdog, tray restore guard, no overlap with fullscreen apps | ✔ Done ✔ Tested (1.11.1) |
 
 ### 11.17 Invariants for future work
 
@@ -876,8 +904,8 @@ publish\RightDock.exe
 ```
 
 `tools\publish.ps1` writes `publish\` and the portable ZIP
-`dist\RightDock-1.11.0-win-x64.zip`; add `-Installer` to compile
-`dist\RightDock-1.11.0-setup.exe` with Inno Setup 6 (install it from
+`dist\RightDock-1.11.1-win-x64.zip`; add `-Installer` to compile
+`dist\RightDock-1.11.1-setup.exe` with Inno Setup 6 (install it from
 https://jrsoftware.org/isinfo.php first). Stop the running instance before republishing
 (the exe/dll are locked while running). `publish/` must include the SQLite native
 runtimes (`runtimes/win-x64/native/e_sqlite3.dll`); `dotnet publish` copies them
