@@ -172,6 +172,27 @@ namespace RightDock.Modules
             DockItemsChanged?.Invoke();
         }
 
+        internal void SetAppearance(string moduleId, string iconKey, string iconColor, int iconSize)
+        {
+            ModuleEntry entry = Find(moduleId);
+            if (entry == null) return;
+
+            string key = string.IsNullOrWhiteSpace(iconKey) ? null : iconKey.Trim();
+            string color = string.IsNullOrWhiteSpace(iconColor) ? null : iconColor.Trim();
+            int size = AppSettings.NormalizeIconSize(iconSize) == iconSize ? iconSize : 0;
+
+            if (entry.State.IconKey == key && entry.State.IconColor == color && entry.State.IconSize == size)
+            {
+                return;
+            }
+
+            entry.State.IconKey = key;
+            entry.State.IconColor = color;
+            entry.State.IconSize = size;
+            _store.Save(entry.State);
+            DockItemsChanged?.Invoke();
+        }
+
         internal void ToggleCompact(ModuleEntry entry, FrameworkElement anchor)
         {
             if (entry == null || !entry.State.IsEnabled) return;

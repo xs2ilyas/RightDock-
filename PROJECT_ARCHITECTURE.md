@@ -1,15 +1,16 @@
 # RightDock — Project Architecture
 
-> Current release: **1.11.1** (launcher + Phase 1 infrastructure + Phase 2 productivity
+> Current release: **1.12.0** (launcher + Phase 1 infrastructure + Phase 2 productivity
 > modules + Phase 3 personal tracking + Phase 4 planning and insight + Phase 5 quick
 > tools and learning + Phase 6 hardening + Phase 7 bell sounds + Phase 8 focus mini
-> timer + Phase 9 system tray icon + fullscreen recovery)
+> timer + Phase 9 system tray icon + fullscreen recovery + icon customization)
 > Target direction: native Windows **Productivity & Life Management Dock** (see §11)
 
 RightDock is a single-process WPF application that renders a 50 px taskbar-like dock on
 the right edge of the primary monitor. It reserves desktop work area through the Windows
-AppBar protocol, launches pinned applications, and supports a 181-glyph outlined icon
-system, auto-hide with edge reveal, a five-tab settings popup, and a productivity layer:
+AppBar protocol, launches pinned applications, supports a 181-glyph outlined icon system
+with dock-wide sizing and per-module glyph/color/size overrides, auto-hide with edge
+reveal, and a six-page settings window; plus a productivity layer:
 SQLite persistence, a module manager with compact/expanded popups, a centralized
 scheduler, in-app notification cards, and the Dashboard, Focus, Tasks, Reminders, Notes,
 Habits, Medication, Health & Lifestyle, Calendar, Statistics, Quick Tools and Learning
@@ -62,7 +63,7 @@ RightDock/
 ├─ Data/
 │  ├─ Database.cs            SQLite connection, pragmas, versioned migrations, query helpers
 │  ├─ DataBackupService.cs   ZIP backup, inspection, staged restore and safety copies
-│  ├─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config)
+│  ├─ ModuleStateStore.cs    ModuleSettings persistence (enabled/visible/sort/config/icon overrides)
 │  ├─ FocusStore.cs          FocusSessions rows, recent activity, daily totals, ranges
 │  ├─ TaskStore.cs           Tasks CRUD, views, search, counts, ranges, recurrence-insert
 │  ├─ ReminderStore.cs       Reminders CRUD, snooze, completion, recurrence, date ranges
@@ -278,8 +279,12 @@ Three icon sources are merged into one picker:
 - All failures are swallowed and degrade to a fallback; a malformed file cannot crash
   the dock.
 
-Rendering color is global: `MainWindow` converts `settings.IconColor` into a frozen
-`SolidColorBrush` and repaints pins on change. The picker receives the same color so
+Rendering color and size come from `settings.IconColor` and `settings.IconSize` by
+default: `MainWindow` converts the color into a frozen `SolidColorBrush` and passes the
+normalized size (20/26/30/34 px, default 26) to `CreateIconElement` for every pin and
+module. Since 1.12.0 a module can override the glyph, color and size through
+`ModuleManager.SetAppearance`; `RebuildModuleButtons` resolves state-override → module
+default → global value per attribute. The picker receives the effective color so
 previews match the dock.
 
 `IconCatalog.cs` is generated (see §10). `Entry` records key, display name, category
@@ -311,7 +316,9 @@ Shared visual language across the dock and both popups:
 | Type | Segoe UI Variable Text / Segoe UI; Fluent Icons for chrome glyphs |
 | Motion | 170 ms dock slide; 180 ms toast fade-in, 160 ms fade-out |
 
-Dock buttons are 38×38 with 26 px icons. The bottom stack is fixed:
+Dock buttons are 38×38; module and pin icons render at the dock icon size (default 26,
+options 20/26/30/34 px in Appearance) with per-module overrides. The Add, Settings and
+Close buttons keep their fixed glyph size. The bottom stack is fixed:
 **Add (E710) → Settings (E713) → Close (E711)**, each with a left-placed tooltip.
 
 Settings (`SettingsWindow`, 560×560, six tabs) uses a segmented tab strip with
@@ -319,10 +326,15 @@ six pages:
 
 1. **General** — auto-hide toggle + explanation of the 50 px reservation / edge reveal.
 2. **Appearance** — 10 preset swatches + rainbow "custom" swatch, current hex label,
-   native Windows color dialog (`FullOpen`).
+   native Windows color dialog (`FullOpen`), plus the **ICON SIZE** picker
+   (`IconSizeCombo`: Small 20, Medium 26, Large 30, Extra large 34 px).
 3. **Modules** — one row per registered module with icon, name, description, an
-   enable/disable toggle, and a **Hide from dock / Show in dock** link; the empty state
-   reads "No modules are registered yet."
+   enable/disable toggle, a **Hide from dock / Show in dock** link and a
+   **Customize icon…** link; the empty state reads "No modules are registered yet."
+   Expanding a row shows an inline panel with the effective preview, **Choose icon…**
+   (icon picker without the "this app" row), **Default icon**, the ten preset colors,
+   **Custom color…**, **Default color**, a size combo whose first entry is
+   "Default · <dock size> px", and **Reset module icon**.
 4. **Notifications** — master notifications toggle, a **Send test notification** button,
    and a **SOUNDS** section with two bell pickers (Focus completion, Reminders), each with
    a **Preview** button and a shared status line; the inline status reports success or
@@ -332,8 +344,9 @@ six pages:
 6. **Startup** — run-at-Windows-startup toggle, resolved exe path, inline error text if
    the registry write fails (toggle reverts on failure).
 
-Settings are applied live through events (`AutoHideChanged`, `IconColorChanged`) or
-immediate `ModuleManager` calls, and persisted immediately; there is no Save/Apply step.
+Settings are applied live through events (`AutoHideChanged`, `IconColorChanged`,
+`IconSizeChanged`) or immediate `ModuleManager` calls, and persisted immediately; there
+is no Save/Apply step.
 
 ---
 
@@ -342,7 +355,8 @@ immediate `ModuleManager` calls, and persisted immediately; there is no Save/App
 ```
 %APPDATA%\RightDock\
 ├─ pins.json       [ { "Name": …, "Path": …, "Icon": "lucide:…" } ]
-├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "NotificationsEnabled": true,
+├─ settings.json   { "AutoHide": true, "IconColor": "#A9A9A9", "IconSize": 26,
+│                    "NotificationsEnabled": true,
 │                    "FocusSound": "classic", "ReminderSound": "soft",
 │                    "MiniTimerPinned": true, "MiniTimerLeft": …, "MiniTimerTop": … }
 ├─ rightdock.db    SQLite database (WAL): module state + all productivity data
@@ -370,11 +384,13 @@ Statistics read-only aggregate the existing tables. Version 3 (1.7.0) adds
 `DurationSeconds`, `StartedUtc`, `EndedUtc`, `CreatedUtc`) with an index on `StartedUtc`;
 breathing data is kept separate from Focus so it never distorts focus totals. Learning
 reuses the version 1 `LearningGoals` and `LearningSessions` tables, with sessions linked
-by `GoalId` (`ON DELETE SET NULL`) so deleting a goal keeps its history.
+by `GoalId` (`ON DELETE SET NULL`) so deleting a goal keeps its history. Version 4 (1.12.0)
+adds `ModuleSettings.IconKey`, `IconColor` and `IconSize` for per-module appearance.
 
-`ModuleSettings` stores `IsEnabled`, `IsVisible`, `SortOrder`, and `ConfigJson` per
-module id; `ModuleManager` loads it at startup and saves on every change. Disabling a
-module keeps its row and all module data intact.
+`ModuleSettings` stores `IsEnabled`, `IsVisible`, `SortOrder`, `ConfigJson`, and the
+optional icon override columns (`IconKey`, `IconColor`, `IconSize`; 0 means "follow the
+dock size") per module id; `ModuleManager` loads it at startup and saves on every change.
+Disabling a module keeps its row and all module data intact.
 
 | Integration | Mechanism |
 | --- | --- |
@@ -413,7 +429,7 @@ A backup is one ZIP chosen by the user (default name
 Create validates the copy (`PRAGMA integrity_check`, schema range 1…current) before
 zipping, so a corrupt archive is never produced. `InspectBackup` extracts the database
 to a temp folder, re-validates it and returns a summary used by the confirmation dialog
-(`schema v3 · 4.2 MB · 1,234 rows`).
+(`schema v4 · 4.2 MB · 1,234 rows`).
 
 Restore is staged, not applied live: `StageRestore` extracts entries with a path-traversal
 guard, validates the staged database and JSON, then writes `restore.pending`. The settings
@@ -469,7 +485,8 @@ open the database while the old process is still shutting down; a duplicate star
   over 10 s, 420 handles, 13 threads**; 1.11.0 with the tray icon active idles at
   **119.8 MB working set, 69.9 MB private, 0.016 CPU seconds over 10 s, 409 handles,
   13 threads**; 1.11.1 idles at **117.0 MB working set, 63.4 MB private, 0.016 CPU
-  seconds over 10 s, 436 handles, 10 threads**. Bell streams are created on the first ring and cached per selected tone,
+  seconds over 10 s, 436 handles, 10 threads**; 1.12.0 idles at **119.3 MB working set,
+  69.3 MB private, 0.016 CPU seconds over 10 s, 442 handles, 15 threads**. Bell streams are created on the first ring and cached per selected tone,
   so an idle session holds no audio buffers; the mini timer window is created only when a
   focus session starts and redraws on the existing 1 s focus tick; the tray icon has no
   timer and wakes only for shell messages (the on-demand WinForms notification-area stack
@@ -784,7 +801,7 @@ maintenance in Settings.
 - **Data & Backup tab** (`SettingsWindow`) — shows the database path, schema, size and row
   total; "Open data folder", "Run integrity check", "Create backup…", "Restore backup…",
   "Copy diagnostics". Status lines turn green on success and red on failure. The About row
-  reads `RightDock <version> · .NET 5 · schema v3`.
+  reads `RightDock <version> · .NET 5 · schema v4`.
 - **Restart flow** — restore stages the archive, then `Process.Start(exe, "--restart")`
   and `Application.Shutdown()`. The new process waits on the instance mutex and applies
   the staged restore before opening SQLite, so no module ever sees a replaced database.
@@ -862,11 +879,13 @@ new package or process is involved.
 
 ### 11.15 Settings evolution
 
-The settings window covers General, Appearance, **Modules** (enable/disable, hide/show in
-dock), **Notifications** (master toggle, test card, bell pickers and previews), **Data**
-(diagnostics, backup, restore, copy diagnostics) and **Startup**. The focus mini timer has
-no settings page: its pin and close controls live on the pill itself. `settings.json` keys
-stay compatible and default safely; the window is 560×560 with six tabs.
+The settings window covers General, Appearance (global color plus the dock icon size),
+**Modules** (enable/disable, hide/show in dock, and the inline per-module icon, color and
+size editor), **Notifications** (master toggle, test card, bell pickers and previews),
+**Data** (diagnostics, backup, restore, copy diagnostics) and **Startup**. The focus mini
+timer has no settings page: its pin and close controls live on the pill itself.
+`settings.json` keys stay compatible and default safely; the window is 560×560 with six
+tabs.
 
 ### 11.16 Module phases
 
@@ -882,6 +901,7 @@ stay compatible and default safely; the window is 560×560 with six tabs.
 | 8 | Draggable focus mini timer with pin, close, paused state and persisted placement | ✔ Done ✔ Tested (1.10.0) |
 | 9 | System tray icon with open, minimize to tray, restart and exit | ✔ Done ✔ Tested (1.11.0) |
 | 10 | Fullscreen suppression watchdog, tray restore guard, no overlap with fullscreen apps | ✔ Done ✔ Tested (1.11.1) |
+| 11 | Dock-wide icon size plus per-module glyph, color and size overrides | ✔ Done ✔ Tested (1.12.0) |
 
 ### 11.17 Invariants for future work
 

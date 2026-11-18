@@ -16,6 +16,40 @@ picker, settings popup) are described in `IMPLEMENTATION_PROGRESS.md`.
 
 ---
 
+## [1.12.0] — 2026-11-18 — Module icons, colors and sizes
+
+### Added
+- **Dock icon size** — the Appearance tab has an **ICON SIZE** picker with four steps
+  (Small 20, Medium 26, Large 30, Extra large 34 px). It applies to module icons and
+  pinned-app icons instantly; the Add, Settings and Close buttons keep their fixed
+  38×38 size.
+- **Per-module appearance** — every row in Settings → Modules has a **Customize icon…**
+  link (also offered as **Customize icon…** in the module's dock context menu). The
+  panel provides:
+  - the 181-glyph icon picker (without the "this app" row) and a **Default icon** reset;
+  - the ten preset colors plus the native Windows color dialog, with **Default color**;
+  - a size override (Default / 20 / 26 / 30 / 34 px) on top of the global size;
+  - **Reset module icon** to clear all three overrides at once.
+- Changes rebuild the dock immediately and persist in `ModuleSettings` (`IconKey`,
+  `IconColor`, `IconSize`); schema version 4 adds the three columns.
+
+### Changed
+- `IconPickerWindow` gained an `allowAppIcon` flag so per-module pickers omit the pinned
+  app's own icon while the pin picker keeps it.
+- Settings opening is centralized in `MainWindow.ShowSettings(moduleId)`; the existing
+  Settings button passes no module and the context menu passes the module id.
+
+### Verified
+- Live Windows 11 session: switching the global size 26 → 30 enlarged module and pin
+  icons while the bottom buttons stayed put; Dashboard was given a star glyph, red
+  `#EF6B6B` and 34 px and the dock updated immediately; the row survived a restart
+  (`appearance row dashboard / lucide:star / #EF6B6B / 34`, `PRAGMA user_version` 4);
+  **Default icon** and **Reset module icon** restored the defaults; the open-from-menu
+  path landed on Modules with the row expanded, and the pin icon picker still showed
+  "Use MedHistory's own icon".
+
+---
+
 ## [1.11.1] — 2026-11-18 — Fullscreen recovery fix
 
 ### Fixed

@@ -1,15 +1,16 @@
 # RightDock — Implementation Progress
 
-> Release **1.11.1** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
+> Release **1.12.0** — launcher + Phase 1 infrastructure + Phase 2 productivity modules
 > (Focus, Tasks, Reminders, Notes) + Phase 3 personal tracking (Habits, Medication,
 > Health & Lifestyle) + Phase 4 planning and insight (Dashboard, Notes manager, Calendar,
 > Statistics) + Phase 5 quick tools and learning (Quick Tools, Learning) + Phase 6
 > hardening (profiling, backup/restore, migration and OS-event tests, installer assets) +
 > Phase 7 bell sounds (ten synthesized choices, triple focus ring, single reminder ring) +
 > Phase 8 focus mini timer (draggable pill with pin and close) + Phase 9 system tray
-> icon (open, minimize, restart, exit) + fullscreen recovery (dock returns after videos)
+> icon (open, minimize, restart, exit) + fullscreen recovery (dock returns after videos) +
+> icon customization (dock-wide icon size, per-module glyph/color/size overrides)
 > complete.
-> Next up: post-1.11 maintenance (see §17 known limitations).
+> Next up: post-1.12 maintenance (see §18 known limitations).
 > Last updated: 2026-11-18.
 
 Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 session) ·
@@ -34,6 +35,7 @@ Status legend: **✔ Done** · **✔ Tested** (verified on a live Windows 11 ses
 | v1.10.0 | Phase 8: draggable focus mini timer with pin, close, persisted placement | ✔ Done ✔ Tested |
 | v1.11.0 | Phase 9: system tray icon with open, minimize, restart and exit | ✔ Done ✔ Tested |
 | v1.11.1 | Fullscreen recovery: reliable return after fullscreen apps, no video overlap | ✔ Done ✔ Tested |
+| v1.12.0 | Icon customization: dock-wide icon size, per-module glyph, color and size overrides | ✔ Done ✔ Tested |
 | Docs | Architecture, progress, changelog, README, GitHub repository | ✔ Done |
 
 ---
@@ -835,7 +837,50 @@ again ("comes and goes"). Only a restart recovered.
 
 ---
 
-## 15. Documentation and repository (completed)
+## 15. v1.12.0 — Module icons, colors and sizes (completed, tested)
+
+### Model
+- `AppSettings.IconSize` (default 26, one of 20/26/30/34 px via `IconSizeOptions` and
+  `NormalizeIconSize`) is stored in `settings.json`; the Appearance page changes it and
+  raises `IconSizeChanged`, which makes `MainWindow` rebuild pins and module buttons.
+- `ModuleSettings` gained `IconKey`, `IconColor` and `IconSize` (0 = follow the dock
+  size). Schema version 4 adds the three columns in one transactional migration;
+  `ModuleStateStore` loads and upserts them, and `ModuleManager.SetAppearance` trims
+  blanks to NULL, clamps the size, skips no-op writes and raises `DockItemsChanged`.
+- `MainWindow.RebuildModuleButtons` resolves per module: state key → module default key;
+  state color → the global icon brush; state size → the global size. Pins use the global
+  size, and the fallback letter tile scales with it (`max(12, round(size × 0.62))`).
+
+### Settings UI
+- Appearance adds an **ICON SIZE** combo (`IconSizeCombo`, "Dock icon size") with
+  Small 20 / Medium 26 / Large 30 / Extra large 34 px.
+- Every Modules row has a **Customize icon…** link that expands an inline panel:
+  icon preview + **Choose icon…** (icon picker with `allowAppIcon: false`) +
+  **Default icon**; ten `MiniSwatch` preset colors + **Custom color…** (native dialog) +
+  **Default color**; a size combo whose first entry is "Default · <dock size> px"; and
+  **Reset module icon** when any override exists.
+- The module dock context menu gained **Customize icon…** between Open and Hide from
+  dock; it opens `SettingsWindow` with `InitialModuleId`, which rebuilds the Modules page
+  and selects that tab.
+
+### Verified on a live Windows 11 session
+- Appearance → ICON SIZE: 26 → 30 enlarged every module icon and the pinned-app icon;
+  the Add, Settings and Close buttons stayed 38×38 (dock screenshots before/after).
+- Dashboard → Customize icon… picked `lucide:star`, preset red `#EF6B6B` and Extra large
+  34 px; the dock repainted immediately and the row read
+  `dashboard / lucide:star / #EF6B6B / 34` with `PRAGMA user_version` 4.
+- Restarting kept the red 34 px star while the other modules followed the global 30 px;
+  switching the global size back to 26 restored everything except the overrides.
+- **Default icon** and **Reset module icon** reverted correctly (row returned to
+  `NULL / NULL / 0`), test overrides were cleared afterwards, and the original
+  `settings.json` values were restored.
+- Right-click → **Customize icon…** opened Settings on Modules with that row expanded.
+- Pin picker regression: right-click → Change icon still lists "Use MedHistory's own
+  icon"; per-module pickers do not.
+
+---
+
+## 16. Documentation and repository (completed)
 
 - `PROJECT_ARCHITECTURE.md` — current architecture + target module architecture.
 - `IMPLEMENTATION_PROGRESS.md` — this file.
@@ -845,19 +890,19 @@ again ("comes and goes"). Only a restart recovered.
 
 ---
 
-## 16. Measured resource baseline
+## 17. Measured resource baseline
 
 Measured on a running `publish\RightDock.exe` (Windows 11, 2560×1600 @125 %, dock
 visible, all twelve modules registered, no popups open, 10 s idle sample with
-`tools/measure.ps1`, fresh 1.11.1 process):
+`tools/measure.ps1`, fresh 1.12.0 process):
 
 | Metric | Value |
 | --- | --- |
 | Processes | 1 |
-| Working set | 117.0 MB |
-| Private bytes | 63.4 MB |
+| Working set | 119.3 MB |
+| Private bytes | 69.3 MB |
 | Idle CPU | 0.016 CPU seconds over 10 s (0.16 % of one core) |
-| Handles / threads | 436 / 10 |
+| Handles / threads | 442 / 15 |
 | Timers | 110 ms hover poll; scheduler timer (idle until work is due); focus 1 s tick only while a session runs; Quick Tools 1 s breathing tick only while a session runs; view refresh timers only while Dashboard/Calendar/Statistics are open; animation timer only during slides; bell ring timer only while a multi-ring sequence is playing; mini timer redraws on the focus tick and exists only during a session; the tray icon has no timer and reacts to shell messages |
 | Audio | WAV rendered and cached on the first ring; no audio buffers while idle |
 | Database | one SQLite connection (WAL), no background threads |
@@ -877,12 +922,13 @@ opening all views ≈146 MB / ≈94 MB / ≈0.26 %; 1.7.0 Phase 5 idle 126.8 MB 
 over 10 s; 1.9.0 fresh 109.0 MB / 62.2 MB / 0.016 CPU seconds over 10 s; 1.10.0 fresh
 108.6 MB / 61.0 MB / 0.016 CPU seconds over 10 s; 1.11.0 fresh 119.8 MB / 69.9 MB /
 0.016 CPU seconds over 10 s; 1.11.1 fresh 117.0 MB / 63.4 MB / 0.016 CPU seconds over
-10 s. The 1.8.0 sample was taken after the stress run, so WPF's retained views are
-included; 1.9.0–1.11.1 were measured on freshly started published processes.
+10 s; 1.12.0 fresh 119.3 MB / 69.3 MB / 0.016 CPU seconds over 10 s. The 1.8.0 sample
+was taken after the stress run, so WPF's retained views are included; 1.9.0–1.12.0 were
+measured on freshly started published processes.
 
 ---
 
-## 17. Known limitations (current release)
+## 18. Known limitations (current release)
 
 - **Primary monitor only** — the monitor containing (0,0) is used; per-monitor dock
   placement is not implemented.
@@ -894,11 +940,13 @@ included; 1.9.0–1.11.1 were measured on freshly started published processes.
 - **Hover polling** — 110 ms `GetCursorPos` instead of event hooks; kept after the Phase 6
   review because CPU cost measured at 0.016 CPU seconds over 10 s idle.
 - **No pin reordering** — order is insertion order; drag-to-reorder is pending.
-- **Fixed pin icon size** (26 px) — icon-size setting is pending.
+- **Icon overrides are module-only** — modules can set glyph, color and size; pinned
+  apps follow the dock-wide icon size and color (a pin's glyph can still be changed from
+  its menu), and there is no per-pin size or color.
 - **Missing dock settings** — width, position, always-on-top and tooltip toggles from the
   design mockup are not implemented yet; auto-hide is the only behavior toggle.
-- **Global icon color only** — per-icon colors are not supported; shell icons keep their
-  original colors.
+- **Shell icons keep their original colors** — the dock color and per-module colors
+  apply to line glyphs only.
 - **SVG parser** is intentionally minimal (no transforms, styles, gradients, arcs
   outside path data).
 - **Startup entry is static** — if the exe is moved, the Run value must be re-toggled.
@@ -963,7 +1011,7 @@ included; 1.9.0–1.11.1 were measured on freshly started published processes.
 
 ---
 
-## 18. Pending roadmap
+## 19. Pending roadmap
 
 ### Phase 1 — Core infrastructure (completed in 1.3.0)
 - [x] `ModuleManager` registration, enable/disable, persisted configuration.
@@ -1030,10 +1078,11 @@ included; 1.9.0–1.11.1 were measured on freshly started published processes.
 
 ---
 
-## 19. Acceptance criteria tracking
+## 20. Acceptance criteria tracking
 
 From the master specification §11 (items 23–25 track the Phase 4 scope, 26–27 Phase 5,
-28 Phase 7, 29 Phase 8, 30 Phase 9 and 31 the 1.11.1 fullscreen fix):
+28 Phase 7, 29 Phase 8, 30 Phase 9, 31 the 1.11.1 fullscreen fix and 32 the 1.12.0 icon
+customization):
 
 | # | Criterion | Status |
 | --- | --- | --- |
@@ -1068,10 +1117,11 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
 | 29 | Focus shows a small draggable timer with pin and close while a session runs | ✔ Tested (auto-show, drag with saved position, pin/topmost, paused color, hide on close/reset, clean dock exit) |
 | 30 | Tray icon can minimize, reopen, restart and exit the app cleanly | ✔ Tested (overflow icon, dark menu, work-area release on minimize, single-instance restart, icon removal on exit) |
 | 31 | Dock returns after fullscreen videos without a restart and never covers them | ✔ Tested (watchdog release at +0.7 s, hidden for borderless 2560×1600 windows and Edge F11, work area 2560→2498 px automatically, tray restore guard) |
+| 32 | Dock-wide icon size plus per-module icon, color and size customization | ✔ Tested (size 26→30 resized modules and pins with the bottom buttons unchanged; Dashboard star + `#EF6B6B` + 34 px persisted across restart at schema v4; reset links restored defaults) |
 
 ---
 
-## 20. Test method notes
+## 21. Test method notes
 
 - UI automation via PowerShell + UIAutomation. The dock is found by window title
   "Right Dock"; module popups and the Settings window appear as owned windows nested in
@@ -1108,6 +1158,12 @@ From the master specification §11 (items 23–25 track the Phase 4 scope, 26–
   class `SystemTray.NormalButton`. The WinForms menu is a separate titleless top-level
   HWND: `rightclickxy` opens it and its items are located by name globally. Work-area
   changes are read from `Screen.PrimaryScreen.WorkingArea` after `SetProcessDPIAware`.
+- **Appearance controls (1.12.0)** — the dock size picker is `IconSizeCombo` (name
+  "Dock icon size"); the 10 module color `MiniSwatch` buttons have no automation names,
+  so click them at their 32×32 physical bounds. Links containing the ellipsis character
+  ("Customize icon…", "Choose icon…") should be matched by name **prefix** because the
+  `…` (U+2026) does not survive every console code page; picker cells are unnamed and
+  are clicked by bounding rectangle after filtering with the search box.
 - **Fullscreen suppression is tested with `tools/simulate-fullscreen.ps1`** — it posts the
   registered `RightDock_AppBarCallback` message with `lParam = 1` (on) or `0` (off) to the
   dock HWND. A genuine fullscreen check needs a borderless window covering the monitor

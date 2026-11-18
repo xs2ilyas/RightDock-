@@ -18,10 +18,12 @@ namespace RightDock
         private readonly string _appName;
         private readonly ImageSource _appIcon;
         private readonly Brush _iconStroke;
+        private readonly bool _allowAppIcon;
 
         public string SelectedKey { get; private set; }
 
-        public IconPickerWindow(string currentKey, string appName, ImageSource appIcon, Color iconColor)
+        public IconPickerWindow(string currentKey, string appName, ImageSource appIcon, Color iconColor,
+            bool allowAppIcon = true)
         {
             InitializeComponent();
 
@@ -29,6 +31,7 @@ namespace RightDock
             _appName = appName;
             _appIcon = appIcon;
             _iconStroke = CreateFrozenBrush(iconColor);
+            _allowAppIcon = allowAppIcon;
 
             IconRepository.RefreshUserIcons();
             Rebuild();
@@ -57,7 +60,7 @@ namespace RightDock
             string filter = (SearchBox.Text ?? string.Empty).Trim();
             List<IconItem> items = IconRepository.GetItems();
 
-            if (filter.Length == 0)
+            if (filter.Length == 0 && _allowAppIcon)
             {
                 AddSection("This app", BuildAppIconRow());
             }

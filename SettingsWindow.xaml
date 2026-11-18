@@ -251,6 +251,37 @@
             </Setter>
         </Style>
 
+        <Style x:Key="MiniSwatch" TargetType="Button">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Ring" CornerRadius="13" BorderThickness="2" BorderBrush="Transparent">
+                            <Border Width="20" Height="20" CornerRadius="10"
+                                    Background="{TemplateBinding Background}">
+                                <TextBlock x:Name="Check" Text="&#xE73E;" FontFamily="Segoe Fluent Icons"
+                                           FontSize="9" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="White" Visibility="Collapsed"/>
+                            </Border>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#66FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="1">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="#FFFFFF"/>
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SectionTitle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#8A8A8A"/>
             <Setter Property="FontSize" Value="10.5"/>
@@ -364,6 +395,14 @@
                     <Button Style="{StaticResource LinkButton}" HorizontalAlignment="Left"
                             Margin="3,6,0,0" Content="Choose custom color…" Click="PickCustom_Click"/>
                     <Border Style="{StaticResource Divider}"/>
+                    <TextBlock Style="{StaticResource SectionTitle}" Text="ICON SIZE"/>
+                    <TextBlock Style="{StaticResource RowDescription}" Margin="2,0,0,6"
+                               Text="Sets the icon size for modules and pinned apps. Individual modules can override it."/>
+                    <ComboBox x:Name="IconSizeCombo" Style="{StaticResource SoundCombo}"
+                              HorizontalAlignment="Left"
+                              AutomationProperties.Name="Dock icon size"
+                              AutomationProperties.AutomationId="IconSizeCombo"/>
+                    <Border Style="{StaticResource Divider}"/>
                     <TextBlock Foreground="#8C8C8C" FontSize="11" TextWrapping="Wrap" LineHeight="17"
                                Text="Apps set to show their own icon keep the original shell colors."/>
                 </StackPanel>
@@ -403,7 +442,7 @@
                         <StackPanel x:Name="ModulesList"/>
                         <Border Style="{StaticResource Divider}"/>
                         <TextBlock Foreground="#8C8C8C" FontSize="11" TextWrapping="Wrap" LineHeight="17"
-                                   Text="Disabling a module removes it from the dock but keeps its data. Use &quot;Hide from dock&quot; to keep a module running without its dock icon."/>
+                                   Text="Disabling a module removes it from the dock but keeps its data. Use &quot;Hide from dock&quot; to keep a module running without its dock icon. Use &quot;Customize icon&quot; to pick a different glyph, color or size for one module."/>
                     </StackPanel>
                 </ScrollViewer>
 

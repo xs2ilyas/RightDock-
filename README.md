@@ -4,7 +4,7 @@ A native, single-process productivity dock for the right edge of Windows. Right 
 
 Built with WPF on .NET 5 — no WebView, no Electron, no background services, no network calls.
 
-> Current release: **1.11.1** — dock shell, twelve modules, local SQLite storage, toggleable notifications, ten synthesized bell sounds, a draggable focus mini timer, a system tray icon, and reliable return from fullscreen apps.
+> Current release: **1.12.0** — dock shell, twelve modules, per-module icon/color/size customization, local SQLite storage, toggleable notifications, ten synthesized bell sounds, a draggable focus mini timer, a system tray icon, and reliable return from fullscreen apps.
 
 ## Highlights
 
@@ -12,6 +12,7 @@ Built with WPF on .NET 5 — no WebView, no Electron, no background services, no
 - **Always-on-top, non-activating** — `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`; the dock never steals focus and has no taskbar button.
 - **Auto-hide with edge reveal** — hover the rightmost 5 px of the screen to slide the dock in; it slides away after the cursor leaves. Fullscreen apps hide it automatically and it comes back when fullscreen ends, like the taskbar; menus and dialogs pause it.
 - **Pins with icons** — add `.exe`, `.lnk`, `.bat`, `.cmd`, `.msc` and `.appref-ms` files (multi-select), launch with a left click, remove from the right-click menu. Choose from **181 built-in Lucide outline glyphs** or drop your own `*.svg` into `%APPDATA%\RightDock\icons`.
+- **Icon customization** — pick a dock-wide icon size (20/26/30/34 px) in Appearance, then override the glyph, color and size of any single module from **Customize icon…** in Settings → Modules or the module's right-click menu. Overrides live in SQLite and can be reset per attribute or all at once; the Add, Settings and Close buttons keep their fixed size.
 - **Twelve productivity modules** — focus sessions, tasks, reminders, notes, habits, medication, health, dashboard, calendar, statistics, quick tools and learning. Compact views sit beside the dock; every module opens a full expanded window.
 - **Focus mini timer** — starting a session pops a small 176×64 draggable pill at the bottom-right with the countdown, a pin button for always-on-top, and a close button. Its position and pin state persist in `settings.json`; time turns amber while paused.
 - **System tray icon** — the Right Dock icon sits in the notification area. Left-click brings the dock back; the right-click menu keeps the dock visible, minimizes it to the tray (releasing the reserved work area), restarts it, or exits cleanly.
@@ -153,6 +154,7 @@ Right Dock is designed to stay small while idle. Measured on Windows 11 (2560×1
 | 1.10.0 (twelve modules + mini timer, idle) | 108.6 MB | 61.0 MB | 0.016 s over 10 s | 420 / 13 |
 | 1.11.0 (twelve modules + mini timer + tray icon, idle) | 119.8 MB | 69.9 MB | 0.016 s over 10 s | 409 / 13 |
 | 1.11.1 (fullscreen recovery fix, idle) | 117.0 MB | 63.4 MB | 0.016 s over 10 s | 436 / 10 |
+| 1.12.0 (module icon customization, idle) | 119.3 MB | 69.3 MB | 0.016 s over 10 s | 442 / 15 |
 
 A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private / 163 MB working set with flat handle, GDI and USER counts, confirming popups are reclaimed.
 
@@ -186,12 +188,14 @@ A 27-cycle UI stress run across all modules plateaued at roughly 111 MB private 
 | 1.10.0 | Draggable focus mini timer with pin, close and saved placement |
 | 1.11.0 | System tray icon with open, minimize, restart and exit |
 | 1.11.1 | Fullscreen recovery: dock returns after fullscreen videos, never overlaps them |
+| 1.12.0 | Dock-wide icon size plus per-module icon, color and size overrides |
 
 ## Known limitations
 
 - Bells play through the default output device only; the app does not choose a device.
 - Focus, reminder and medication alerts appear as in-app toasts while Right Dock is running; there is no Windows toast/notification fallback when the app is closed.
 - The dock targets the primary monitor on the right edge; it is not a multi-monitor-per-dock app.
+- Module icons support individual glyph, color and size overrides; pinned apps follow the dock-wide icon size and color (a pin's glyph can still be changed from its menu).
 - Published builds are win-x64 only.
 - The installer requires Inno Setup 6 to build; it is not committed as a binary.
 

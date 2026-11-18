@@ -45,6 +45,7 @@ namespace RightDock
         private bool _closing;
         private bool _hiddenByTray;
         private bool _keepShownUntilHover;
+        private int _iconSize = AppSettings.DefaultIconSize;
         private DateTime _fullscreenSince = DateTime.MinValue;
         private bool _slideHides;
         private int _modalDepth;
@@ -75,6 +76,7 @@ namespace RightDock
 
             _iconColor = ParseIconColor(_settings.IconColor);
             _iconBrush = CreateFrozenBrush(_iconColor);
+            _iconSize = AppSettings.NormalizeIconSize(_settings.IconSize);
             RebuildButtons();
             RebuildModuleButtons();
 
@@ -478,13 +480,23 @@ namespace RightDock
                 ToolTipService.SetPlacement(button, PlacementMode.Left);
                 AutomationProperties.SetName(button, entry.Module.Name);
 
-                FrameworkElement icon = IconRepository.CreateIconElement(entry.Module.IconKey, 26, _iconBrush);
+                string iconKey = string.IsNullOrWhiteSpace(entry.State.IconKey)
+                    ? entry.Module.IconKey
+                    : entry.State.IconKey;
+                Brush iconBrush = string.IsNullOrWhiteSpace(entry.State.IconColor)
+                    ? _iconBrush
+                    : CreateFrozenBrush(ParseIconColor(entry.State.IconColor));
+                int iconSize = entry.State.IconSize > 0
+                    ? AppSettings.NormalizeIconSize(entry.State.IconSize)
+                    : _iconSize;
+
+                FrameworkElement icon = IconRepository.CreateIconElement(iconKey, iconSize, iconBrush);
                 button.Content = icon ?? (object)new TextBlock
                 {
                     Text = string.IsNullOrWhiteSpace(entry.Module.Name)
                         ? "?"
                         : entry.Module.Name.Substring(0, 1).ToUpperInvariant(),
-                    FontSize = 16,
+                    FontSize = Math.Max(12, Math.Round(iconSize * 0.62)),
                     FontWeight = FontWeights.SemiBold,
                     Foreground = FallbackTextBrush,
                 };
@@ -504,11 +516,15 @@ namespace RightDock
             var openItem = new MenuItem { Header = "Open" };
             openItem.Click += (_, __) => _modules.ToggleCompact(entry, anchor);
 
+            var customizeItem = new MenuItem { Header = "Customize icon…" };
+            customizeItem.Click += (_, __) => ShowSettings(entry.Module.Id);
+
             var hideItem = new MenuItem { Header = "Hide from dock" };
             hideItem.Click += (_, __) => _modules.SetVisible(entry.Module.Id, false);
 
             var menu = new ContextMenu();
             menu.Items.Add(openItem);
+            menu.Items.Add(customizeItem);
             menu.Items.Add(hideItem);
             menu.Opened += (_, __) => _modalDepth++;
             menu.Closed += (_, __) => _modalDepth = Math.Max(0, _modalDepth - 1);
@@ -534,7 +550,7 @@ namespace RightDock
             string key = IconRepository.ResolveKey(pin.Icon);
             if (key != IconCatalog.AppIconKey)
             {
-                UIElement lineIcon = IconRepository.CreateIconElement(key, 26, _iconBrush);
+                UIElement lineIcon = IconRepository.CreateIconElement(key, _iconSize, _iconBrush);
                 if (lineIcon != null) return lineIcon;
             }
 
@@ -544,8 +560,8 @@ namespace RightDock
                 var image = new Image
                 {
                     Source = icon,
-                    Width = 26,
-                    Height = 26,
+                    Width = _iconSize,
+                    Height = _iconSize,
                     Stretch = Stretch.Uniform,
                 };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
@@ -559,7 +575,7 @@ namespace RightDock
             return new TextBlock
             {
                 Text = label,
-                FontSize = 16,
+                FontSize = Math.Max(12, Math.Round(_iconSize * 0.62)),
                 FontWeight = FontWeights.SemiBold,
                 Foreground = FallbackTextBrush,
             };
@@ -660,12 +676,18 @@ namespace RightDock
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
+            ShowSettings(null);
+        }
+
+        private void ShowSettings(string moduleId)
+        {
             if (_services == null) return;
 
             var settings = new SettingsWindow(_services)
             {
                 Owner = this,
                 WindowStartupLocation = WindowStartupLocation.Manual,
+                InitialModuleId = moduleId,
             };
 
             Rect work = SystemParameters.WorkArea;
@@ -692,6 +714,13 @@ namespace RightDock
             {
                 _iconColor = color;
                 _iconBrush = CreateFrozenBrush(color);
+                RebuildButtons();
+                RebuildModuleButtons();
+            };
+
+            settings.IconSizeChanged += size =>
+            {
+                _iconSize = AppSettings.NormalizeIconSize(size);
                 RebuildButtons();
                 RebuildModuleButtons();
             };

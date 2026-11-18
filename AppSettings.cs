@@ -7,14 +7,26 @@ namespace RightDock
 {
     public sealed class AppSettings
     {
+        public const int DefaultIconSize = 26;
+        public const int MinIconSize = 20;
+        public const int MaxIconSize = 34;
+
+        public static readonly int[] IconSizeOptions = { 20, 26, 30, 34 };
+
         public bool AutoHide { get; set; } = true;
         public string IconColor { get; set; } = "#A9A9A9";
+        public int IconSize { get; set; } = DefaultIconSize;
         public bool NotificationsEnabled { get; set; } = true;
         public string FocusSound { get; set; } = BellSynth.DefaultFocus;
         public string ReminderSound { get; set; } = BellSynth.DefaultReminder;
         public bool MiniTimerPinned { get; set; } = true;
         public double? MiniTimerLeft { get; set; }
         public double? MiniTimerTop { get; set; }
+
+        public static int NormalizeIconSize(int size)
+        {
+            return Array.IndexOf(IconSizeOptions, size) >= 0 ? size : DefaultIconSize;
+        }
     }
 
     internal static class SettingsStore
@@ -31,6 +43,7 @@ namespace RightDock
                 if (settings == null) return new AppSettings();
 
                 if (string.IsNullOrWhiteSpace(settings.IconColor)) settings.IconColor = "#A9A9A9";
+                settings.IconSize = AppSettings.NormalizeIconSize(settings.IconSize);
                 if (!BellSynth.IsKnown(settings.FocusSound)) settings.FocusSound = BellSynth.DefaultFocus;
                 if (!BellSynth.IsKnown(settings.ReminderSound)) settings.ReminderSound = BellSynth.DefaultReminder;
                 return settings;

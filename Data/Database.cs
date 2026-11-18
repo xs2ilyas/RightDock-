@@ -226,10 +226,15 @@ CREATE TABLE IF NOT EXISTS BreathingSessions (
     CreatedUtc TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS IX_BreathingSessions_Started ON BreathingSessions(StartedUtc);
+"),
+            (4, @"
+ALTER TABLE ModuleSettings ADD COLUMN IconKey TEXT;
+ALTER TABLE ModuleSettings ADD COLUMN IconColor TEXT;
+ALTER TABLE ModuleSettings ADD COLUMN IconSize INTEGER NOT NULL DEFAULT 0;
 ")
         };
 
-        internal const int CurrentSchemaVersion = 3;
+        internal const int CurrentSchemaVersion = 4;
 
         private readonly object _gate = new object();
         private readonly string _path;
